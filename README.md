@@ -65,6 +65,7 @@ CAMERA_TARGET_FPS=10
 CAMERA_WIDTH=1280
 CAMERA_HEIGHT=720
 SCENE_JSON_PATH=runtime/latest_scene.json
+SCENE_LOG_DIR=runtime/logs
 ```
 
 여러 GPU가 있으면 `YOLO_DEVICE=1`, `YOLO_DEVICE=2`처럼 바꿔서 특정 GPU를 지정할 수 있습니다.
@@ -149,7 +150,15 @@ python -m app.live_camera --no-display --max-frames 10
 runtime/latest_scene.json
 ```
 
-이 JSON은 매 프레임의 full mask polygon을 제외한 compact 형태입니다. Language 모델로 넘기기 위한 기본 인터페이스로 사용합니다.
+또한 실행할 때마다 세션 단위 JSONL 로그가 생성됩니다.
+
+```text
+runtime/logs/live_camera_YYYYMMDD_HHMMSS.jsonl
+```
+
+`latest_scene.json`은 최신 상태만 덮어쓰고, JSONL 로그는 프레임별 scene state를 한 줄씩 누적합니다. 실험 문서화와 성능 분석은 JSONL 로그를 기준으로 합니다.
+
+이 JSON들은 매 프레임의 full mask polygon을 제외한 compact 형태입니다. Language 모델로 넘기기 위한 기본 인터페이스로 사용합니다.
 
 ```json
 {
@@ -159,6 +168,7 @@ runtime/latest_scene.json
   "model": "yolo11s-seg.pt",
   "image_size": [1280, 720],
   "inference_ms": 24.3,
+  "loop_fps": 9.8,
   "objects": [
     {
       "id": "obj_01",

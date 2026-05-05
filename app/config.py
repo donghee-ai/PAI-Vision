@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     camera_width: int = Field(default=1280, alias="CAMERA_WIDTH")
     camera_height: int = Field(default=720, alias="CAMERA_HEIGHT")
     scene_json_path: str = Field(default="runtime/latest_scene.json", alias="SCENE_JSON_PATH")
+    scene_log_dir: str = Field(default="runtime/logs", alias="SCENE_LOG_DIR")
 
 
 @lru_cache

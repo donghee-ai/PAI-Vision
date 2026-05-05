@@ -41,4 +41,5 @@ class SceneResponse(BaseModel):
     model: str
     image_size: list[int] = Field(description="[width, height]")
     inference_ms: float | None = None
+    loop_fps: float | None = None
     objects: list[SceneObject]
