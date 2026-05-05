@@ -1,0 +1,25 @@
+# This is a comment - ignored by Git
+# Ignore environment variables (sensitive data)
+.env
+
+# Ignore dependency directories
+node_modules/
+vendor/
+
+# Ignore log files
+*.log
+logs/
+
+# Ignore OS-specific system files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE/Editor settings
+.vscode/
+.idea/
+*.swp
+
+# Ignore build/dist directories
+dist/
+build/
+bin/
