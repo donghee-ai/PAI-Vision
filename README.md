@@ -2,7 +2,81 @@
 
 Physical AI 기반 VLA 파이프라인의 Vision 모듈 실험 레포입니다.
 
-현재 버전은 pretrained `YOLO11s-seg` 모델로 카메라 프레임을 실시간 추론하고, 인식 결과를 화면에 overlay하며, Language/Action 파트가 읽을 수 있는 compact scene JSON을 갱신합니다.
+이 레포의 현재 목표는 **카메라/이미지 입력 → YOLO 기반 물체 인식 → Language/Action 파트가 읽을 수 있는 compact scene JSON 출력** 흐름을 빠르게 검증하는 것입니다.
+
+현재 버전은 pretrained `YOLO11s-seg` 모델로 카메라 프레임을 실시간 추론하고, 인식 결과를 화면에 overlay하며, compact scene JSON과 세션 로그를 갱신합니다.
+
+## Quick Start
+
+### 로컬 실행 최소 절차
+1. Python 가상환경 생성
+2. CUDA에 맞는 PyTorch 설치
+3. `requirements.txt` 설치
+4. `.env` 생성
+5. 카메라 추론 또는 API 서버 실행
+
+예시:
+
+```bash
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130
+pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m app.live_camera --no-display --max-frames 10
+```
+
+### 입력 / 출력
+- **입력**: 웹캠 프레임 또는 업로드 이미지
+- **추론**: YOLO11 segmentation
+- **출력**:
+  - overlay된 시각화 화면/PNG
+  - full prediction JSON
+  - Language/Action 파트 전달용 compact scene JSON
+
+## Scene JSON contract
+
+`/predict/scene` 및 `runtime/latest_scene.json`의 목적은 Vision 결과를 후속 모듈이 안정적으로 읽게 하는 것입니다.
+
+현재 기준:
+- `center_pixel`은 **입력 이미지 기준 픽셀 좌표**입니다.
+- 좌표계 원점은 **좌상단 `(0, 0)`** 입니다.
+- `bbox_xyxy`는 `[x1, y1, x2, y2]` 형식입니다.
+- `depth_m`, `camera_xyz`, `robot_xyz`는 아직 미구현이라 기본적으로 `null`일 수 있습니다.
+- 즉 현재 버전은 **2D scene understanding baseline** 으로 보고, 이후 depth / camera calibration / robot transform 단계로 확장합니다.
+
+예시:
+
+```json
+{
+  "frame_id": 128,
+  "camera_id": "front_rgb",
+  "objects": [
+    {
+      "id": "obj_01",
+      "label": "mouse",
+      "confidence": 0.94,
+      "bbox_xyxy": [331.23, 189.97, 971.52, 1228.74],
+      "center_pixel": [655, 700],
+      "depth_m": null,
+      "camera_xyz": null,
+      "robot_xyz": null,
+      "status": "detected"
+    }
+  ]
+}
+```
+
+## PAI integration intent
+
+이 레포는 단순 detection demo가 아니라, 이후 PAI 파이프라인에서 다음 형태로 연결되는 것을 의도합니다.
+
+- Vision: 물체 후보 추출
+- Language: 현재 장면 이해 및 목표 선택
+- Action: 선택된 물체에 대한 행동 계획
+
+즉 Vision 모듈의 핵심 책임은 **“무엇이 어디에 있는지”를 후속 모듈이 쓰기 쉬운 형태로 넘기는 것**입니다.
 
 ## 1. 환경 전략
 
