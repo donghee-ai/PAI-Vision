@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     yolo_imgsz: int = Field(default=640, alias="YOLO_IMGSZ")
     yolo_conf: float = Field(default=0.25, alias="YOLO_CONF")
     yolo_iou: float = Field(default=0.7, alias="YOLO_IOU")
+    camera_id: str = Field(default="front_rgb", alias="CAMERA_ID")
+    camera_index: int = Field(default=0, alias="CAMERA_INDEX")
+    camera_target_fps: float = Field(default=10.0, alias="CAMERA_TARGET_FPS")
+    camera_width: int = Field(default=1280, alias="CAMERA_WIDTH")
+    camera_height: int = Field(default=720, alias="CAMERA_HEIGHT")
+    scene_json_path: str = Field(default="runtime/latest_scene.json", alias="SCENE_JSON_PATH")
 
 
 @lru_cache
