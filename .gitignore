@@ -5,6 +5,12 @@
 # Ignore dependency directories
 node_modules/
 vendor/
+.venv/
+venv/
+
+# Ignore Python artifacts
+__pycache__/
+*.py[cod]
 
 # Ignore log files
 *.log
@@ -23,3 +29,9 @@ Thumbs.db
 dist/
 build/
 bin/
+
+# Ignore downloaded model weights and generated runs
+*.pt
+*.onnx
+*.engine
+runs/
