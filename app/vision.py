@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageFont
 from ultralytics import YOLO
 
+from app.device import resolve_yolo_device
 from app.schemas import DetectedObject, PredictionResponse
 
 
@@ -111,6 +112,11 @@ class YoloSegmentationService:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_model", YOLO(self.model_path))
+        object.__setattr__(self, "_resolved_device", resolve_yolo_device(self.device))
+
+    @property
+    def resolved_device(self) -> str:
+        return self._resolved_device
 
     def predict(
         self,
@@ -125,7 +131,7 @@ class YoloSegmentationService:
             conf=conf,
             iou=iou,
             imgsz=imgsz,
-            device=self.device,
+            device=self._resolved_device,
             retina_masks=True,
             verbose=False,
         )

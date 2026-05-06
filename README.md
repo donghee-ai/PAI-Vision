@@ -10,7 +10,7 @@ Physical AI 기반 VLA 파이프라인의 Vision 모듈 실험 레포입니다.
 
 ### 로컬 실행 최소 절차
 1. Python 가상환경 생성
-2. CUDA에 맞는 PyTorch 설치
+2. 본인 환경에 맞는 PyTorch 설치
 3. `requirements.txt` 설치
 4. `.env` 생성
 5. 카메라 추론 또는 API 서버 실행
@@ -19,13 +19,15 @@ Physical AI 기반 VLA 파이프라인의 Vision 모듈 실험 레포입니다.
 
 ```bash
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130
+pip install torch torchvision torchaudio
 pip install -r requirements.txt
-Copy-Item .env.example .env
+cp .env.example .env
 python -m app.live_camera --no-display --max-frames 10
 ```
+
+Apple Silicon 맥북 에어에서는 `YOLO_DEVICE=auto`로 두면 MPS를 우선 사용하고, MPS를 못 쓰면 CPU로 자동 전환합니다.
 
 ### 입력 / 출력
 - **입력**: 웹캠 프레임 또는 업로드 이미지
@@ -86,6 +88,7 @@ python -m app.live_camera --no-display --max-frames 10
 
 | 환경 | 권장 방식 |
 | --- | --- |
+| MacBook Air / Apple Silicon | `pip install torch torchvision torchaudio` 후 `YOLO_DEVICE=auto` |
 | 로컬 RTX 5060 | `.venv` + CUDA 13.0 PyTorch wheel |
 | RTX PRO 6000 Blackwell 서버 | 기존 CUDA 13 PyTorch Docker 이미지 |
 | 다른 GPU 서버 | Docker base image로 CUDA/PyTorch 고정 |
@@ -93,7 +96,57 @@ python -m app.live_camera --no-display --max-frames 10
 
 `requirements.txt`는 FastAPI, Ultralytics, OpenCV, Pillow 같은 앱 공통 의존성만 관리합니다.
 
-## 2. 로컬 RTX 5060 실행 준비
+## 2. MacBook Air / Apple Silicon 실행 준비
+
+Apple Silicon Mac에서는 일반적으로 PyTorch 공식 wheel을 설치하면 MPS를 사용할 수 있습니다.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install torch torchvision torchaudio
+pip install -r requirements.txt
+```
+
+MPS 사용 가능 여부를 확인하려면:
+
+```bash
+python -c "import torch; print(torch.__version__); print(torch.backends.mps.is_available()); print(torch.backends.mps.is_built())"
+```
+
+예상 예시:
+
+```text
+2.7.0
+True
+True
+```
+
+`.env`를 만들고 `YOLO_DEVICE=auto`를 유지합니다.
+
+```bash
+cp .env.example .env
+```
+
+```env
+YOLO_MODEL=yolo11s-seg.pt
+YOLO_DEVICE=auto
+YOLO_IMGSZ=640
+YOLO_CONF=0.25
+YOLO_IOU=0.7
+CAMERA_ID=front_rgb
+CAMERA_INDEX=0
+CAMERA_TARGET_FPS=10
+CAMERA_WIDTH=1280
+CAMERA_HEIGHT=720
+SCENE_JSON_PATH=runtime/latest_scene.json
+SCENE_LOG_DIR=runtime/logs
+```
+
+`YOLO_DEVICE`는 `auto`, `cpu`, `mps`, `cuda:0`, `cuda:1` 같은 값을 받을 수 있습니다.
+`auto`는 현재 실행 가능한 디바이스를 `CUDA -> MPS -> CPU` 순서로 고릅니다.
+
+## 3. 로컬 RTX 5060 실행 준비
 
 Windows PowerShell 기준입니다.
 
@@ -127,24 +180,9 @@ NVIDIA GeForce RTX 5060
 Copy-Item .env.example .env
 ```
 
-```env
-YOLO_MODEL=yolo11s-seg.pt
-YOLO_DEVICE=0
-YOLO_IMGSZ=640
-YOLO_CONF=0.25
-YOLO_IOU=0.7
-CAMERA_ID=front_rgb
-CAMERA_INDEX=0
-CAMERA_TARGET_FPS=10
-CAMERA_WIDTH=1280
-CAMERA_HEIGHT=720
-SCENE_JSON_PATH=runtime/latest_scene.json
-SCENE_LOG_DIR=runtime/logs
-```
+`YOLO_DEVICE=cuda:0`처럼 명시적으로 특정 GPU를 지정할 수 있습니다.
 
-여러 GPU가 있으면 `YOLO_DEVICE=1`, `YOLO_DEVICE=2`처럼 바꿔서 특정 GPU를 지정할 수 있습니다.
-
-## 3. CPU Torch가 깔렸을 때 복구
+## 4. CPU Torch가 깔렸을 때 복구
 
 아래처럼 나오면 CPU 전용 PyTorch가 설치된 상태입니다.
 
@@ -169,7 +207,7 @@ pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url htt
 python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO CUDA')"
 ```
 
-## 4. RTX PRO 6000 Blackwell 서버
+## 5. RTX PRO 6000 Blackwell 서버
 
 서버에서는 이미 CUDA 13 PyTorch Docker 이미지를 사용합니다.
 
@@ -196,7 +234,7 @@ CUDA_VISIBLE_DEVICES=0 uvicorn app.main:app --host 0.0.0.0 --port 7071
 
 Docker 이미지가 이미 CUDA/PyTorch 버전을 고정하므로, 이 환경에서는 conda를 추가로 쓰지 않는 편이 단순합니다.
 
-## 5. 카메라 실시간 추론
+## 6. 카메라 실시간 추론
 
 웹캠을 열고 10 FPS 목표로 YOLO11-Seg 결과를 화면에 띄웁니다.
 
@@ -260,7 +298,7 @@ runtime/logs/live_camera_YYYYMMDD_HHMMSS.jsonl
 }
 ```
 
-## 6. API 서버 실행
+## 7. API 서버 실행
 
 FastAPI 서버는 단발 이미지 테스트나 외부 모듈 연동용입니다.
 
@@ -270,7 +308,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 처음 실행할 때 Ultralytics가 `yolo11s-seg.pt` pretrained weight를 자동으로 내려받습니다.
 
-## 7. API 테스트
+## 8. API 테스트
 
 full mask polygon을 포함한 JSON 응답:
 
@@ -324,7 +362,7 @@ curl "http://localhost:8000/scene/latest"
 }
 ```
 
-## 8. 참고
+## 9. 참고
 
 RTX 5060과 RTX PRO 6000 Blackwell은 NVIDIA Blackwell 계열입니다. CUDA 12.1 같은 오래된 PyTorch wheel 대신 CUDA 13 계열 PyTorch를 우선 사용합니다.
 
@@ -336,7 +374,7 @@ CUDA Toolkit이 시스템에 설치되어 있어도 PyTorch pip wheel은 자체 
 - PyTorch install docs: https://docs.pytorch.org/get-started/locally/
 - PyTorch CUDA 13 wheel index: https://download.pytorch.org/whl/cu130/
 
-## 9. 다음 단계
+## 10. 다음 단계
 
 1. Depth 카메라 입력을 `/predict`에 추가합니다.
 2. `center_pixel + depth`를 camera XYZ로 변환합니다.

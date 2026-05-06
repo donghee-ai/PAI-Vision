@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from PIL import Image, UnidentifiedImageError
 
 from app.config import get_settings
+from app.device import resolve_yolo_device
 from app.scene import build_scene_response
 from app.schemas import PredictionResponse, SceneResponse
 from app.vision import YoloSegmentationService, render_prediction_overlay
@@ -31,6 +32,7 @@ def health() -> dict[str, str | int | float]:
         "status": "ok",
         "model": settings.yolo_model,
         "device": settings.yolo_device,
+        "resolved_device": resolve_yolo_device(settings.yolo_device),
         "imgsz": settings.yolo_imgsz,
         "conf": settings.yolo_conf,
         "iou": settings.yolo_iou,

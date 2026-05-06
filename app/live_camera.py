@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=settings.camera_height, help="Requested capture height")
     parser.add_argument("--target-fps", type=float, default=settings.camera_target_fps, help="Target processing FPS")
     parser.add_argument("--model", default=settings.yolo_model, help="Model path or Ultralytics model name")
-    parser.add_argument("--device", default=settings.yolo_device, help="Device, e.g. cpu, 0, 1")
+    parser.add_argument("--device", default=settings.yolo_device, help="Device, e.g. auto, cpu, mps, cuda:0")
     parser.add_argument("--imgsz", type=int, default=settings.yolo_imgsz, help="Inference image size")
     parser.add_argument("--conf", type=float, default=settings.yolo_conf, help="Confidence threshold")
     parser.add_argument("--iou", type=float, default=settings.yolo_iou, help="IoU threshold")
@@ -65,7 +65,7 @@ def main() -> None:
     log_write_ok = True
 
     print(
-        f"Starting live camera: camera={args.camera}, device={args.device}, "
+        f"Starting live camera: camera={args.camera}, device={args.device} -> {service.resolved_device}, "
         f"model={args.model}, target_fps={args.target_fps}"
     )
     print(f"Session id: {session_id}")

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     )
 
     yolo_model: str = Field(default="yolo11s-seg.pt", alias="YOLO_MODEL")
-    yolo_device: str = Field(default="cpu", alias="YOLO_DEVICE")
+    yolo_device: str = Field(default="auto", alias="YOLO_DEVICE")
     yolo_imgsz: int = Field(default=640, alias="YOLO_IMGSZ")
     yolo_conf: float = Field(default=0.25, alias="YOLO_CONF")
     yolo_iou: float = Field(default=0.7, alias="YOLO_IOU")
