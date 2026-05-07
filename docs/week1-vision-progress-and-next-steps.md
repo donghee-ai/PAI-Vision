@@ -93,9 +93,9 @@ docs/experiments/2026-05-05-live-camera-session-02.md
 
 ## 현재 한계
 
-### 1. Depth 없음
+### 1. 2D RGB-only 인식
 
-현재 YOLO는 RGB 이미지에서 2D 정보만 제공한다.
+현재 프로젝트는 2D RGB 카메라만 사용한다. 따라서 Vision JSON은 픽셀 좌표 기반 scene state로 유지한다.
 
 가능한 정보:
 
@@ -105,33 +105,25 @@ confidence
 bbox
 mask
 center_pixel
+track_id
 ```
 
-아직 없는 정보:
+`depth_m`, `camera_xyz`, `robot_xyz` 같은 3D 필드는 현재 프로젝트 범위에서 제외한다.
+
+### 2. Action 좌표 해석 필요
+
+로봇이 실제로 움직일 때는 3D 좌표 대신 2D 픽셀 좌표와 task-specific action policy를 연결해야 한다.
+
+필요한 연결:
 
 ```text
-depth_m
-camera_xyz
-robot_xyz
-grasp_hint
+track_id
+→ center_pixel
+→ image-space action target
+→ robot/action policy
 ```
 
-이 값들은 YOLO가 기본 제공하지 않는다. RGB-D 카메라, stereo depth, table calibration, 또는 별도 depth model이 필요하다.
-
-### 2. Robot 좌표계 없음
-
-로봇이 실제로 움직이려면 `center_pixel`이 아니라 로봇 기준 3D 좌표가 필요하다.
-
-필요한 변환:
-
-```text
-pixel coordinate
-→ depth
-→ camera coordinate
-→ robot coordinate
-```
-
-이를 위해 camera intrinsics와 camera-to-robot extrinsics가 필요하다.
+이를 위해 action policy가 2D 픽셀 target을 어떻게 해석할지 먼저 정해야 한다.
 
 ### 3. Pretrained COCO label
 
@@ -163,7 +155,6 @@ Language/Action 파트와 안정적으로 연결하려면 프레임 간 tracking
 - WebSocket을 먼저 쓸지, ROS2 bridge를 고려할지
 - 실제 카메라와 로봇 구성
 - 초기 데모 객체 클래스
-- Depth 카메라 사용 여부
 - MuJoCo 시뮬레이션과 실제 로봇 연결 방식
 
 ### 2. 통신 구조
@@ -182,32 +173,15 @@ Language/Action 파트와 안정적으로 연결하려면 프레임 간 tracking
 추천 순서:
 
 ```text
-WebSocket scene stream
+WebSocket /ws/scenes scene stream
 → Language planner 연결
 → 이후 ROS2 bridge 검토
 ```
 
-### 3. Depth / 3D 좌표
+### 3. 2D Action target 정리
 
-Depth 카메라가 들어오면 다음 작업을 한다.
-
-```text
-YOLO mask
-→ mask 내부 depth median
-→ center_pixel + depth_m
-→ camera_xyz
-→ robot_xyz
-```
-
-추가해야 할 필드:
-
-```json
-{
-  "depth_m": 0.64,
-  "camera_xyz": [0.12, -0.05, 0.64],
-  "robot_xyz": [0.41, 0.18, 0.09]
-}
-```
+Action 파트가 사용할 최소 입력은 `track_id`, `label`, `center_pixel`, `bbox_xyxy`, `status`다.
+후속 작업은 이 2D scene state를 어떤 action command로 바꿀지 정하는 것이다.
 
 ### 4. 커스텀 데이터셋
 
@@ -276,10 +250,10 @@ VLA용 scene JSON 생성
 실험 결과 문서화
 ```
 
-다음 핵심 단계는 연결 방식 결정과 hardware 기반 3D 좌표 확장이다.
+다음 핵심 단계는 연결 방식 결정과 2D action target 안정화다.
 
 ```text
 단기: WebSocket scene stream 또는 Language planner 연결
 중기: custom YOLO11-Seg fine-tuning
-장기: Depth + camera_xyz + robot_xyz + ROS2/robot integration
+장기: 2D track 기반 ROS2/robot integration
 ```

@@ -331,6 +331,25 @@ curl -X POST "http://localhost:8000/predict/annotated" `
 curl "http://localhost:8000/scene/latest"
 ```
 
+브라우저에서 실시간 scene stream을 확인하는 뷰어:
+
+```text
+http://localhost:8000/viewer
+```
+
+Language/Action 모듈이 실시간으로 관찰할 scene stream:
+
+```text
+ws://localhost:8000/ws/scenes
+```
+
+현재는 단일 카메라를 상정하지만, 메시지 안의 `camera_id`로 카메라를 구분합니다.
+필요하면 클라이언트가 `camera_id`와 `max_fps`를 query parameter로 지정할 수 있습니다.
+
+```text
+ws://localhost:8000/ws/scenes?camera_id=front_rgb&max_fps=10
+```
+
 응답 예시는 다음과 같습니다.
 
 ```json
@@ -366,7 +385,6 @@ CUDA Toolkit이 시스템에 설치되어 있어도 PyTorch pip wheel은 자체 
 
 ## 10. 다음 단계
 
-1. Depth 카메라 입력을 `/predict`에 추가합니다.
-2. `center_pixel + depth`를 camera XYZ로 변환합니다.
-3. calibration matrix를 적용해 robot XYZ를 채웁니다.
-4. 커스텀 tabletop 데이터셋으로 `red_block`, `left_box` 같은 클래스에 fine-tuning합니다.
+1. `track_id` 기반으로 Language/Action planner가 같은 대상을 안정적으로 참조하게 합니다.
+2. WebSocket 또는 ROS2 bridge로 compact 2D scene JSON을 전달합니다.
+3. 커스텀 tabletop 데이터셋으로 `red_block`, `left_box` 같은 클래스에 fine-tuning합니다.
