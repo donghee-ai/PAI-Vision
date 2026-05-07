@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +14,28 @@ from app.config import get_settings
 from app.scene import append_scene_jsonl, build_scene_response, write_scene_json
 from app.tracking import CentroidTracker
 from app.vision import YoloSegmentationService, render_prediction_overlay
+
+
+@dataclass
+class LiveCameraConfig:
+    camera: int
+    camera_id: str
+    width: int
+    height: int
+    target_fps: float
+    model: str
+    device: str
+    imgsz: int
+    conf: float
+    iou: float
+    scene_json: Path
+    no_scene_json: bool
+    scene_log_dir: Path
+    no_session_log: bool
+    no_display: bool
+    max_frames: int | None
+    window_name: str
+
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,6 +61,30 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+
+def config_from_args(args: argparse.Namespace) -> LiveCameraConfig:
+    return LiveCameraConfig(
+        camera=args.camera,
+        camera_id=args.camera_id,
+        width=args.width,
+        height=args.height,
+        target_fps=args.target_fps,
+        model=args.model,
+        device=args.device,
+        imgsz=args.imgsz,
+        conf=args.conf,
+        iou=args.iou,
+        scene_json=Path(args.scene_json),
+        no_scene_json=args.no_scene_json,
+        scene_log_dir=Path(args.scene_log_dir),
+        no_session_log=args.no_session_log,
+        no_display=args.no_display,
+        max_frames=args.max_frames,
+        window_name=args.window_name,
+    )
+
+
+
 def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
     capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)
     if not capture.isOpened():
@@ -51,14 +98,14 @@ def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
     return capture
 
 
-def main() -> None:
-    args = parse_args()
-    target_interval = 1.0 / args.target_fps if args.target_fps > 0 else 0.0
-    service = YoloSegmentationService(model_path=args.model, device=args.device)
+
+def run_live_camera(config: LiveCameraConfig) -> None:
+    target_interval = 1.0 / config.target_fps if config.target_fps > 0 else 0.0
+    service = YoloSegmentationService(model_path=config.model, device=config.device)
     tracker = CentroidTracker()
-    capture = open_camera(args.camera, args.width, args.height)
+    capture = open_camera(config.camera, config.width, config.height)
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    scene_log_path = args.scene_log_dir / f"live_camera_{session_id}.jsonl"
+    scene_log_path = config.scene_log_dir / f"live_camera_{session_id}.jsonl"
 
     frame_id = 0
     smoothed_fps = 0.0
@@ -67,11 +114,11 @@ def main() -> None:
     log_write_ok = True
 
     print(
-        f"Starting live camera: camera={args.camera}, device={args.device} -> {service.resolved_device}, "
-        f"model={args.model}, target_fps={args.target_fps}"
+        f"Starting live camera: camera={config.camera}, device={config.device} -> {service.resolved_device}, "
+        f"model={config.model}, target_fps={config.target_fps}"
     )
     print(f"Session id: {session_id}")
-    if not args.no_session_log:
+    if not config.no_session_log:
         print(f"Session log: {scene_log_path}")
     print("Press q or ESC in the display window to quit.")
 
@@ -91,9 +138,9 @@ def main() -> None:
             inference_started = time.perf_counter()
             prediction = service.predict(
                 image,
-                conf=args.conf,
-                iou=args.iou,
-                imgsz=args.imgsz,
+                conf=config.conf,
+                iou=config.iou,
+                imgsz=config.imgsz,
             )
             prediction = tracker.update(prediction)
             inference_ms = (time.perf_counter() - inference_started) * 1000
@@ -106,13 +153,13 @@ def main() -> None:
             scene = build_scene_response(
                 prediction,
                 frame_id=frame_id,
-                camera_id=args.camera_id,
+                camera_id=config.camera_id,
                 inference_ms=inference_ms,
                 loop_fps=smoothed_fps,
             )
-            if not args.no_scene_json:
-                scene_write_ok = write_scene_json(scene, args.scene_json)
-            if not args.no_session_log:
+            if not config.no_scene_json:
+                scene_write_ok = write_scene_json(scene, config.scene_json)
+            if not config.no_session_log:
                 log_write_ok = append_scene_jsonl(scene, scene_log_path)
 
             rendered = render_prediction_overlay(image, prediction)
@@ -147,13 +194,13 @@ def main() -> None:
                 cv2.LINE_AA,
             )
 
-            if not args.no_display:
-                cv2.imshow(args.window_name, rendered_bgr)
+            if not config.no_display:
+                cv2.imshow(config.window_name, rendered_bgr)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (27, ord("q")):
                     break
 
-            if args.max_frames is not None and frame_id >= args.max_frames:
+            if config.max_frames is not None and frame_id >= config.max_frames:
                 break
 
             elapsed = time.perf_counter() - loop_started
@@ -162,6 +209,13 @@ def main() -> None:
     finally:
         capture.release()
         cv2.destroyAllWindows()
+
+
+
+def main() -> None:
+    args = parse_args()
+    config = config_from_args(args)
+    run_live_camera(config)
 
 
 if __name__ == "__main__":

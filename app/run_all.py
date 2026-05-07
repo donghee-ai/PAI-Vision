@@ -8,7 +8,7 @@ import time
 import uvicorn
 
 from app.config import get_settings
-from app.live_camera import main as live_camera_main
+from app.live_camera import LiveCameraConfig, run_live_camera
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,52 +46,35 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+
 def _run_api_server(host: str, port: int, reload: bool) -> None:
     config = uvicorn.Config("app.main:app", host=host, port=port, reload=reload, log_level="info")
     server = uvicorn.Server(config)
     asyncio.run(server.serve())
 
 
-def _build_live_camera_argv(args: argparse.Namespace) -> list[str]:
-    argv = [
-        "live_camera",
-        "--camera",
-        str(args.camera),
-        "--camera-id",
-        args.camera_id,
-        "--width",
-        str(args.width),
-        "--height",
-        str(args.height),
-        "--target-fps",
-        str(args.target_fps),
-        "--model",
-        args.model,
-        "--device",
-        args.device,
-        "--imgsz",
-        str(args.imgsz),
-        "--conf",
-        str(args.conf),
-        "--iou",
-        str(args.iou),
-        "--scene-json",
-        args.scene_json,
-        "--scene-log-dir",
-        args.scene_log_dir,
-        "--window-name",
-        args.window_name,
-    ]
 
-    if args.no_scene_json:
-        argv.append("--no-scene-json")
-    if args.no_session_log:
-        argv.append("--no-session-log")
-    if args.no_display:
-        argv.append("--no-display")
-    if args.max_frames is not None:
-        argv.extend(["--max-frames", str(args.max_frames)])
-    return argv
+def _build_live_camera_config(args: argparse.Namespace) -> LiveCameraConfig:
+    return LiveCameraConfig(
+        camera=args.camera,
+        camera_id=args.camera_id,
+        width=args.width,
+        height=args.height,
+        target_fps=args.target_fps,
+        model=args.model,
+        device=args.device,
+        imgsz=args.imgsz,
+        conf=args.conf,
+        iou=args.iou,
+        scene_json=args.scene_json,
+        no_scene_json=args.no_scene_json,
+        scene_log_dir=args.scene_log_dir,
+        no_session_log=args.no_session_log,
+        no_display=args.no_display,
+        max_frames=args.max_frames,
+        window_name=args.window_name,
+    )
+
 
 
 def main() -> None:
@@ -108,15 +91,8 @@ def main() -> None:
     if args.server_wait_seconds > 0:
         time.sleep(args.server_wait_seconds)
 
-    import sys
-
-    original_argv = sys.argv[:]
-    try:
-        sys.argv = _build_live_camera_argv(args)
-        print("Starting live camera loop with shared scene JSON output")
-        live_camera_main()
-    finally:
-        sys.argv = original_argv
+    print("Starting live camera loop with shared scene JSON output")
+    run_live_camera(_build_live_camera_config(args))
 
 
 if __name__ == "__main__":
