@@ -14,6 +14,7 @@ Physical AI 기반 VLA 파이프라인의 Vision 모듈 실험 레포입니다.
 3. `requirements.txt` 설치
 4. `.env` 생성
 5. 카메라 추론 또는 API 서버 실행
+6. 필요하면 카메라 + API 서버를 한 번에 실행
 
 예시:
 
@@ -25,6 +26,12 @@ pip install torch torchvision torchaudio
 pip install -r requirements.txt
 cp .env.example .env
 python -m app.live_camera --no-display --max-frames 10
+```
+
+카메라 추론과 FastAPI/WebSocket 서버를 같이 띄우려면:
+
+```bash
+python -m app.run_all --no-display --max-frames 10
 ```
 
 Apple Silicon 맥북 에어에서는 `YOLO_DEVICE=auto`로 두면 MPS를 우선 사용하고, MPS를 못 쓰면 CPU로 자동 전환합니다.
@@ -294,9 +301,16 @@ runtime/logs/live_camera_YYYYMMDD_HHMMSS.jsonl
 ## 7. API 서버 실행
 
 FastAPI 서버는 단발 이미지 테스트나 외부 모듈 연동용입니다.
+단, 데모/협업 편의를 위해 카메라 루프와 서버를 함께 실행하는 runner도 제공합니다.
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+카메라 추론과 API/WebSocket 서버를 동시에 띄우는 실행 방법:
+
+```bash
+python -m app.run_all
 ```
 
 처음 실행할 때 Ultralytics가 `yolo11s-seg.pt` pretrained weight를 자동으로 내려받습니다.
