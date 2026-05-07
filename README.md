@@ -45,8 +45,7 @@ Apple Silicon 맥북 에어에서는 `YOLO_DEVICE=auto`로 두면 MPS를 우선 
 - `center_pixel`은 **입력 이미지 기준 픽셀 좌표**입니다.
 - 좌표계 원점은 **좌상단 `(0, 0)`** 입니다.
 - `bbox_xyxy`는 `[x1, y1, x2, y2]` 형식입니다.
-- `depth_m`, `camera_xyz`, `robot_xyz`는 아직 미구현이라 기본적으로 `null`일 수 있습니다.
-- 즉 현재 버전은 **2D scene understanding baseline** 으로 보고, 이후 depth / camera calibration / robot transform 단계로 확장합니다.
+- 현재 프로젝트는 **2D RGB camera scene understanding**만 사용하므로 depth/3D 좌표 필드는 JSON에 포함하지 않습니다.
 
 예시:
 
@@ -61,9 +60,6 @@ Apple Silicon 맥북 에어에서는 `YOLO_DEVICE=auto`로 두면 MPS를 우선 
       "confidence": 0.94,
       "bbox_xyxy": [331.23, 189.97, 971.52, 1228.74],
       "center_pixel": [655, 700],
-      "depth_m": null,
-      "camera_xyz": null,
-      "robot_xyz": null,
       "status": "detected"
     }
   ]
@@ -289,9 +285,6 @@ runtime/logs/live_camera_YYYYMMDD_HHMMSS.jsonl
       "bbox_xyxy": [331.23, 189.97, 971.52, 1228.74],
       "center_pixel": [655, 700],
       "area_pixels": 538823,
-      "depth_m": null,
-      "camera_xyz": null,
-      "robot_xyz": null,
       "status": "detected"
     }
   ]
@@ -353,9 +346,6 @@ curl "http://localhost:8000/scene/latest"
       "mask_polygon": [[125, 84], [218, 91], [212, 254], [130, 250]],
       "center_pixel": [169, 170],
       "area_pixels": 13452,
-      "depth_m": null,
-      "camera_xyz": null,
-      "robot_xyz": null,
       "status": "detected"
     }
   ]

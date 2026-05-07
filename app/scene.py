@@ -27,14 +27,12 @@ def build_scene_response(
         objects=[
             SceneObject(
                 id=detected.id,
+                track_id=detected.track_id,
                 label=detected.label,
                 confidence=detected.confidence,
                 bbox_xyxy=detected.bbox_xyxy,
                 center_pixel=detected.center_pixel,
                 area_pixels=detected.area_pixels,
-                depth_m=detected.depth_m,
-                camera_xyz=detected.camera_xyz,
-                robot_xyz=detected.robot_xyz,
                 status=detected.status,
             )
             for detected in prediction.objects

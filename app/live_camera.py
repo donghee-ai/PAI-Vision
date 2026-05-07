@@ -11,6 +11,7 @@ from PIL import Image
 
 from app.config import get_settings
 from app.scene import append_scene_jsonl, build_scene_response, write_scene_json
+from app.tracking import CentroidTracker
 from app.vision import YoloSegmentationService, render_prediction_overlay
 
 
@@ -54,6 +55,7 @@ def main() -> None:
     args = parse_args()
     target_interval = 1.0 / args.target_fps if args.target_fps > 0 else 0.0
     service = YoloSegmentationService(model_path=args.model, device=args.device)
+    tracker = CentroidTracker()
     capture = open_camera(args.camera, args.width, args.height)
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     scene_log_path = args.scene_log_dir / f"live_camera_{session_id}.jsonl"
@@ -93,6 +95,7 @@ def main() -> None:
                 iou=args.iou,
                 imgsz=args.imgsz,
             )
+            prediction = tracker.update(prediction)
             inference_ms = (time.perf_counter() - inference_started) * 1000
 
             now = time.perf_counter()

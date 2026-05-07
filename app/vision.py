@@ -91,7 +91,8 @@ def render_prediction_overlay(
             width=line_width,
         )
 
-        label = f"{detected.id} {detected.label} {detected.confidence:.2f}"
+        object_id = detected.track_id or detected.id
+        label = f"{object_id} {detected.label} {detected.confidence:.2f}"
         text_bbox = draw.textbbox((x1, y1), label, font=font)
         text_w = text_bbox[2] - text_bbox[0]
         text_h = text_bbox[3] - text_bbox[1]
