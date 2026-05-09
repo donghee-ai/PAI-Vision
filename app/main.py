@@ -17,6 +17,8 @@ from app.vision import YoloSegmentationService, render_prediction_overlay
 
 app = FastAPI(title="PAI-Vision YOLO Segmentation Server", version="0.1.0")
 SCENE_STREAM_POLL_SECONDS = 0.05
+WS_TOPIC_VISION_UPDATE = "vision_update"
+WS_SENDER_VISION = "vision"
 SCENE_VIEWER_HTML = """
 <!doctype html>
 <html lang="en">
@@ -256,6 +258,13 @@ SCENE_VIEWER_HTML = """
           .replaceAll("'", "&#039;");
       }
 
+      function unwrapSceneMessage(message) {
+        if (message && message.type === "vision_update" && message.data) {
+          return message.data;
+        }
+        return message;
+      }
+
       function renderScene(scene) {
         document.getElementById("cameraId").textContent = valueOrDash(scene.camera_id);
         document.getElementById("frameId").textContent = valueOrDash(scene.frame_id);
@@ -290,7 +299,7 @@ SCENE_VIEWER_HTML = """
       setStatus("connecting");
       const ws = new WebSocket(socketUrl);
       ws.onopen = () => setStatus("connected");
-      ws.onmessage = (event) => renderScene(JSON.parse(event.data));
+      ws.onmessage = (event) => renderScene(unwrapSceneMessage(JSON.parse(event.data)));
       ws.onerror = () => setStatus("error");
       ws.onclose = () => setStatus("closed");
     </script>
@@ -449,7 +458,7 @@ async def scene_stream(
             )
             now = perf_counter()
             if scene_key != last_sent_key and now - last_send_time >= min_send_interval:
-                await websocket.send_json(scene)
+                await websocket.send_json(_build_scene_envelope(scene))
                 last_sent_key = scene_key
                 last_send_time = now
 
@@ -467,6 +476,15 @@ def _read_latest_scene(scene_path: Path) -> dict[str, object] | None:
         return json.loads(scene_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
+
+
+def _build_scene_envelope(scene: dict[str, object]) -> dict[str, object]:
+    return {
+        "type": WS_TOPIC_VISION_UPDATE,
+        "timestamp": scene.get("timestamp"),
+        "sender": WS_SENDER_VISION,
+        "data": scene,
+    }
 
 
 async def _websocket_is_connected(websocket: WebSocket) -> bool:

@@ -368,20 +368,25 @@ ws://localhost:8000/ws/scenes?camera_id=front_rgb&max_fps=10
 
 ```json
 {
-  "model": "yolo11s-seg.pt",
-  "image_size": [640, 480],
-  "objects": [
-    {
-      "id": "obj_01",
-      "label": "cup",
-      "confidence": 0.9321,
-      "bbox_xyxy": [120.4, 80.2, 220.8, 260.7],
-      "mask_polygon": [[125, 84], [218, 91], [212, 254], [130, 250]],
-      "center_pixel": [169, 170],
-      "area_pixels": 13452,
-      "status": "detected"
-    }
-  ]
+  "type": "vision_update",
+  "timestamp": "2026-05-05T14:00:00.000000+00:00",
+  "sender": "vision",
+  "data": {
+    "model": "yolo11s-seg.pt",
+    "image_size": [640, 480],
+    "objects": [
+      {
+        "id": "obj_01",
+        "label": "cup",
+        "confidence": 0.9321,
+        "bbox_xyxy": [120.4, 80.2, 220.8, 260.7],
+        "mask_polygon": [[125, 84], [218, 91], [212, 254], [130, 250]],
+        "center_pixel": [169, 170],
+        "area_pixels": 13452,
+        "status": "detected"
+      }
+    ]
+  }
 }
 ```
 
