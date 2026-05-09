@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from pathlib import Path
 import threading
 import time
 
@@ -36,8 +37,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--imgsz", type=int, default=settings.yolo_imgsz)
     parser.add_argument("--conf", type=float, default=settings.yolo_conf)
     parser.add_argument("--iou", type=float, default=settings.yolo_iou)
-    parser.add_argument("--scene-json", default=settings.scene_json_path)
-    parser.add_argument("--scene-log-dir", default=settings.scene_log_dir)
+    parser.add_argument("--scene-json", type=Path, default=Path(settings.scene_json_path))
+    parser.add_argument("--scene-log-dir", type=Path, default=Path(settings.scene_log_dir))
     parser.add_argument("--no-scene-json", action="store_true")
     parser.add_argument("--no-session-log", action="store_true")
     parser.add_argument("--no-display", action="store_true")
@@ -66,9 +67,9 @@ def _build_live_camera_config(args: argparse.Namespace) -> LiveCameraConfig:
         imgsz=args.imgsz,
         conf=args.conf,
         iou=args.iou,
-        scene_json=args.scene_json,
+        scene_json=Path(args.scene_json),
         no_scene_json=args.no_scene_json,
-        scene_log_dir=args.scene_log_dir,
+        scene_log_dir=Path(args.scene_log_dir),
         no_session_log=args.no_session_log,
         no_display=args.no_display,
         max_frames=args.max_frames,
