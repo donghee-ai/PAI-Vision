@@ -105,7 +105,7 @@ Windows에서 `runtime/latest_scene.json.tmp`를 `runtime/latest_scene.json`으�
 ## Next Steps
 
 1. `runtime/latest_scene.json` 외에 session별 `.jsonl` 누적 로그를 저장한다.
-2. `/scene/stream` WebSocket으로 scene JSON을 실시간 전달한다.
+2. local adapter 또는 외부 hub가 scene JSON을 실시간 전달한다.
 3. mask polygon은 실시간 Language 입력에서는 제외하고, 필요할 때만 별도 조회한다.
 4. Depth 입력을 추가해서 `camera_xyz`, `robot_xyz` 필드를 채운다.
-5. 이후 ROS2 bridge를 추가해 `/vision/scene` topic으로 publish할 수 있게 한다.
+5. 이후 별도 ROS2 bridge가 `/vision/scene` topic으로 publish할 수 있게 한다.

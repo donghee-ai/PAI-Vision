@@ -1,1 +1,1 @@
-"""PAI-Vision inference server package."""
+"""PAI-Vision perception package."""

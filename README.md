@@ -6,6 +6,8 @@ Physical AI 기반 VLA 파이프라인의 Vision 모듈 실험 레포입니다.
 
 현재 버전은 pretrained `YOLO11s-seg` 모델로 카메라 프레임을 실시간 추론하고, 인식 결과를 화면에 overlay하며, compact scene JSON과 세션 로그를 갱신합니다.
 
+장기적으로 WebSocket hub, ROS2 bridge, 중앙 orchestration 책임은 이 레포 밖의 별도 hub/bridge 프로세스가 담당하는 방향입니다. 이 레포 안의 HTTP/WebSocket 기능은 현재 개발/테스트 편의를 위한 **local perception adapter**로 유지합니다.
+
 ## Quick Start
 
 ### 로컬 실행 최소 절차
@@ -13,8 +15,8 @@ Physical AI 기반 VLA 파이프라인의 Vision 모듈 실험 레포입니다.
 2. 본인 환경에 맞는 PyTorch 설치
 3. `requirements.txt` 설치
 4. `.env` 생성
-5. 카메라 추론 또는 API 서버 실행
-6. 필요하면 카메라 + API 서버를 한 번에 실행
+5. 카메라 추론 또는 local API adapter 실행
+6. 필요하면 카메라 + local adapter를 한 번에 실행
 
 예시:
 
@@ -28,7 +30,7 @@ cp .env.example .env
 python -m app.live_camera --no-display --max-frames 10
 ```
 
-카메라 추론과 FastAPI/WebSocket 서버를 같이 띄우려면:
+카메라 추론과 local API/WebSocket adapter를 같이 띄우려면:
 
 ```bash
 python -m app.run_all --no-display --max-frames 10
@@ -97,7 +99,7 @@ Apple Silicon 맥북 에어에서는 `YOLO_DEVICE=auto`로 두면 MPS를 우선 
 | 다른 GPU 서버 | Docker base image로 CUDA/PyTorch 고정 |
 | Docker를 못 쓰는 서버 | conda 또는 `.venv` 대안 사용 |
 
-`requirements.txt`는 FastAPI, Ultralytics, OpenCV, Pillow 같은 앱 공통 의존성만 관리합니다.
+`requirements.txt`는 local adapter, Ultralytics, OpenCV, Pillow 같은 앱 공통 의존성만 관리합니다.
 
 ## 2. MacBook Air / Apple Silicon 실행 준비
 
@@ -226,13 +228,13 @@ nvcr.io/nvidia/pytorch:25.12-py3
 ```bash
 python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 7071
+uvicorn app.local_api:app --host 0.0.0.0 --port 7071
 ```
 
 서버에서 특정 GPU만 사용하려면:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 uvicorn app.main:app --host 0.0.0.0 --port 7071
+CUDA_VISIBLE_DEVICES=0 uvicorn app.local_api:app --host 0.0.0.0 --port 7071
 ```
 
 Docker 이미지가 이미 CUDA/PyTorch 버전을 고정하므로, 이 환경에서는 conda를 추가로 쓰지 않는 편이 단순합니다.
@@ -298,16 +300,17 @@ runtime/logs/live_camera_YYYYMMDD_HHMMSS.jsonl
 }
 ```
 
-## 7. API 서버 실행
+## 7. Local API adapter 실행
 
-FastAPI 서버는 단발 이미지 테스트나 외부 모듈 연동용입니다.
-단, 데모/협업 편의를 위해 카메라 루프와 서버를 함께 실행하는 runner도 제공합니다.
+FastAPI 앱은 단발 이미지 테스트, scene JSON 확인, 브라우저 뷰어 같은 개발 편의용 local adapter입니다.
+장기 통신 hub나 ROS2 bridge 소유권은 이 레포가 아니라 외부 hub/bridge 쪽으로 분리하는 것을 전제로 합니다.
+단, 데모/협업 편의를 위해 카메라 루프와 local adapter를 함께 실행하는 runner도 제공합니다.
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.local_api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-카메라 추론과 API/WebSocket 서버를 동시에 띄우는 실행 방법:
+카메라 추론과 local API/WebSocket adapter를 동시에 띄우는 실행 방법:
 
 ```bash
 python -m app.run_all
@@ -351,13 +354,13 @@ curl "http://localhost:8000/scene/latest"
 http://localhost:8000/viewer
 ```
 
-Language/Action 모듈이 실시간으로 관찰할 scene stream:
+개발 중 scene JSON 변화를 실시간으로 관찰하는 stream:
 
 ```text
 ws://localhost:8000/ws/scenes
 ```
 
-현재는 단일 카메라를 상정하지만, 메시지 안의 `camera_id`로 카메라를 구분합니다.
+현재 adapter는 단일 카메라 개발 흐름을 상정하지만, 메시지 안의 `camera_id`로 카메라를 구분합니다.
 필요하면 클라이언트가 `camera_id`와 `max_fps`를 query parameter로 지정할 수 있습니다.
 
 ```text
@@ -405,5 +408,5 @@ CUDA Toolkit이 시스템에 설치되어 있어도 PyTorch pip wheel은 자체 
 ## 10. 다음 단계
 
 1. `track_id` 기반으로 Language/Action planner가 같은 대상을 안정적으로 참조하게 합니다.
-2. WebSocket 또는 ROS2 bridge로 compact 2D scene JSON을 전달합니다.
+2. 외부 hub/ROS2 bridge가 소비하기 쉬운 compact 2D scene JSON contract를 안정화합니다.
 3. 커스텀 tabletop 데이터셋으로 `red_block`, `left_box` 같은 클래스에 fine-tuning합니다.

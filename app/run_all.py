@@ -15,16 +15,18 @@ from app.live_camera import LiveCameraConfig, run_live_camera
 def parse_args() -> argparse.Namespace:
     settings = get_settings()
     parser = argparse.ArgumentParser(
-        description="Run live camera inference and FastAPI/WebSocket server together."
+        description="Run live camera inference with the local API/WebSocket development adapter."
     )
-    parser.add_argument("--host", default="0.0.0.0", help="Host for FastAPI server")
-    parser.add_argument("--port", type=int, default=8000, help="Port for FastAPI server")
+    parser.add_argument("--host", default="0.0.0.0", help="Host for local API adapter")
+    parser.add_argument("--port", type=int, default=8000, help="Port for local API adapter")
     parser.add_argument("--reload", action="store_true", help="Enable uvicorn reload (dev only)")
     parser.add_argument(
         "--server-wait-seconds",
+        "--adapter-wait-seconds",
+        dest="adapter_wait_seconds",
         type=float,
         default=1.0,
-        help="Seconds to wait after starting API server before camera loop",
+        help="Seconds to wait after starting local API adapter before camera loop",
     )
 
     parser.add_argument("--camera", type=int, default=settings.camera_index)
@@ -48,10 +50,10 @@ def parse_args() -> argparse.Namespace:
 
 
 
-def _run_api_server(host: str, port: int, reload: bool) -> None:
-    config = uvicorn.Config("app.main:app", host=host, port=port, reload=reload, log_level="info")
-    server = uvicorn.Server(config)
-    asyncio.run(server.serve())
+def _run_api_adapter(host: str, port: int, reload: bool) -> None:
+    config = uvicorn.Config("app.local_api:app", host=host, port=port, reload=reload, log_level="info")
+    adapter = uvicorn.Server(config)
+    asyncio.run(adapter.serve())
 
 
 
@@ -81,16 +83,16 @@ def _build_live_camera_config(args: argparse.Namespace) -> LiveCameraConfig:
 def main() -> None:
     args = parse_args()
 
-    print(f"Starting FastAPI/WebSocket server on http://{args.host}:{args.port}")
-    server_thread = threading.Thread(
-        target=_run_api_server,
+    print(f"Starting local API/WebSocket adapter on http://{args.host}:{args.port}")
+    adapter_thread = threading.Thread(
+        target=_run_api_adapter,
         args=(args.host, args.port, args.reload),
         daemon=True,
     )
-    server_thread.start()
+    adapter_thread.start()
 
-    if args.server_wait_seconds > 0:
-        time.sleep(args.server_wait_seconds)
+    if args.adapter_wait_seconds > 0:
+        time.sleep(args.adapter_wait_seconds)
 
     print("Starting live camera loop with shared scene JSON output")
     run_live_camera(_build_live_camera_config(args))
