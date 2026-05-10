@@ -18,10 +18,10 @@ from fastapi.responses import HTMLResponse, Response
 from PIL import Image, UnidentifiedImageError
 
 from app.config import get_settings
-from app.device import resolve_yolo_device
-from app.scene import build_scene_response
-from app.schemas import PredictionResponse, SceneResponse
-from app.vision import YoloSegmentationService, render_prediction_overlay
+from app.perception.device import resolve_yolo_device
+from app.perception.scene import build_scene_response
+from app.perception.schemas import PredictionResponse, SceneResponse
+from app.perception.vision import YoloSegmentationService, render_prediction_overlay
 
 app = FastAPI(title="PAI-Vision Local Perception Adapter", version="0.1.0")
 SCENE_STREAM_POLL_SECONDS = 0.05

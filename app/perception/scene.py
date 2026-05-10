@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from app.schemas import PredictionResponse, SceneObject, SceneResponse
+from app.perception.schemas import PredictionResponse, SceneObject, SceneResponse
 
 
 def build_scene_response(

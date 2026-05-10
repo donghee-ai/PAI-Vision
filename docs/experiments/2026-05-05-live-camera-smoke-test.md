@@ -43,13 +43,13 @@ SCENE_JSON_PATH=runtime/latest_scene.json
 Interactive display:
 
 ```powershell
-python -m app.live_camera
+python -m app.perception.live_camera
 ```
 
 Headless smoke test:
 
 ```powershell
-python -m app.live_camera --no-display --max-frames 5 --target-fps 10
+python -m app.perception.live_camera --no-display --max-frames 5 --target-fps 10
 ```
 
 ## Latest Scene Snapshot

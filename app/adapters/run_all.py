@@ -9,7 +9,7 @@ import time
 import uvicorn
 
 from app.config import get_settings
-from app.live_camera import LiveCameraConfig, run_live_camera
+from app.perception.live_camera import LiveCameraConfig, run_live_camera
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _run_api_adapter(host: str, port: int, reload: bool) -> None:
-    config = uvicorn.Config("app.local_api:app", host=host, port=port, reload=reload, log_level="info")
+    config = uvicorn.Config("app.adapters.local_api:app", host=host, port=port, reload=reload, log_level="info")
     adapter = uvicorn.Server(config)
     asyncio.run(adapter.serve())
 

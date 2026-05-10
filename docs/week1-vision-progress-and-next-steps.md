@@ -31,7 +31,7 @@ Camera frame
 
 ### 3. 실시간 카메라 루프
 
-- `python -m app.live_camera`로 카메라 실시간 추론을 실행할 수 있다.
+- `python -m app.perception.live_camera`로 카메라 실시간 추론을 실행할 수 있다.
 - 화면에는 segmentation mask, bbox, label, center point, inference time, loop FPS가 표시된다.
 - 목표 FPS는 `.env`의 `CAMERA_TARGET_FPS=10`으로 설정했다.
 

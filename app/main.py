@@ -5,6 +5,6 @@ The long-term hub/bridge process should live outside this repository. Keep
 new code can point at `app.local_api:app` directly.
 """
 
-from app.local_api import app
+from app.adapters.local_api import app
 
 __all__ = ["app"]

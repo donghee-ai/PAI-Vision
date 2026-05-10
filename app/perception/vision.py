@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageFont
 from ultralytics import YOLO
 
-from app.device import resolve_yolo_device
-from app.schemas import DetectedObject, PredictionResponse
+from app.perception.device import resolve_yolo_device
+from app.perception.schemas import DetectedObject, PredictionResponse
 
 
 PALETTE: tuple[tuple[int, int, int], ...] = (

@@ -27,13 +27,13 @@ python -m pip install --upgrade pip
 pip install torch torchvision torchaudio
 pip install -r requirements.txt
 cp .env.example .env
-python -m app.live_camera --no-display --max-frames 10
+python -m app.perception.live_camera --no-display --max-frames 10
 ```
 
 카메라 추론과 local API/WebSocket adapter를 같이 띄우려면:
 
 ```bash
-python -m app.run_all --no-display --max-frames 10
+python -m app.adapters.run_all --no-display --max-frames 10
 ```
 
 Apple Silicon 맥북 에어에서는 `YOLO_DEVICE=auto`로 두면 MPS를 우선 사용하고, MPS를 못 쓰면 CPU로 자동 전환합니다.
@@ -228,13 +228,13 @@ nvcr.io/nvidia/pytorch:25.12-py3
 ```bash
 python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
 pip install -r requirements.txt
-uvicorn app.local_api:app --host 0.0.0.0 --port 7071
+uvicorn app.adapters.local_api:app --host 0.0.0.0 --port 7071
 ```
 
 서버에서 특정 GPU만 사용하려면:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 uvicorn app.local_api:app --host 0.0.0.0 --port 7071
+CUDA_VISIBLE_DEVICES=0 uvicorn app.adapters.local_api:app --host 0.0.0.0 --port 7071
 ```
 
 Docker 이미지가 이미 CUDA/PyTorch 버전을 고정하므로, 이 환경에서는 conda를 추가로 쓰지 않는 편이 단순합니다.
@@ -244,19 +244,19 @@ Docker 이미지가 이미 CUDA/PyTorch 버전을 고정하므로, 이 환경에
 웹캠을 열고 10 FPS 목표로 YOLO11-Seg 결과를 화면에 띄웁니다.
 
 ```bash
-python -m app.live_camera
+python -m app.perception.live_camera
 ```
 
 명시적으로 옵션을 줄 수도 있습니다.
 
 ```bash
-python -m app.live_camera --camera 0 --device 0 --target-fps 10 --imgsz 640 --conf 0.25
+python -m app.perception.live_camera --camera 0 --device 0 --target-fps 10 --imgsz 640 --conf 0.25
 ```
 
 카메라와 JSON 갱신만 짧게 확인하려면 화면 없이 몇 프레임만 실행할 수 있습니다.
 
 ```bash
-python -m app.live_camera --no-display --max-frames 10
+python -m app.perception.live_camera --no-display --max-frames 10
 ```
 
 실행 중 화면에는 mask, bbox, label, 중심점, inference time, loop FPS가 표시됩니다. 종료하려면 표시 창에서 `q` 또는 `ESC`를 누릅니다.
@@ -307,13 +307,13 @@ FastAPI 앱은 단발 이미지 테스트, scene JSON 확인, 브라우저 뷰�
 단, 데모/협업 편의를 위해 카메라 루프와 local adapter를 함께 실행하는 runner도 제공합니다.
 
 ```bash
-uvicorn app.local_api:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.adapters.local_api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 카메라 추론과 local API/WebSocket adapter를 동시에 띄우는 실행 방법:
 
 ```bash
-python -m app.run_all
+python -m app.adapters.run_all
 ```
 
 처음 실행할 때 Ultralytics가 `yolo11s-seg.pt` pretrained weight를 자동으로 내려받습니다.

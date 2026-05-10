@@ -11,9 +11,9 @@ import numpy as np
 from PIL import Image
 
 from app.config import get_settings
-from app.scene import append_scene_jsonl, build_scene_response, write_scene_json
-from app.tracking import CentroidTracker
-from app.vision import YoloSegmentationService, render_prediction_overlay
+from app.perception.scene import append_scene_jsonl, build_scene_response, write_scene_json
+from app.perception.tracking import CentroidTracker
+from app.perception.vision import YoloSegmentationService, render_prediction_overlay
 
 
 @dataclass
