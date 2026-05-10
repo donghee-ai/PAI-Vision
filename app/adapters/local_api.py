@@ -10,13 +10,13 @@ import asyncio
 import json
 from functools import lru_cache
 from io import BytesIO
-from pathlib import Path
 from time import perf_counter
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
 from PIL import Image, UnidentifiedImageError
 
+from app.adapters.scene_bus import scene_bus
 from app.config import get_settings
 from app.perception.device import resolve_yolo_device
 from app.perception.scene import build_scene_response
@@ -24,7 +24,6 @@ from app.perception.schemas import PredictionResponse, SceneResponse
 from app.perception.vision import YoloSegmentationService, render_prediction_overlay
 
 app = FastAPI(title="PAI-Vision Local Perception Adapter", version="0.1.0")
-SCENE_STREAM_POLL_SECONDS = 0.05
 WS_TOPIC_VISION_UPDATE = "vision_update"
 WS_SENDER_VISION = "vision"
 SCENE_VIEWER_HTML = """
@@ -419,11 +418,10 @@ async def predict_annotated(
 
 @app.get("/scene/latest")
 def latest_scene() -> Response:
-    settings = get_settings()
-    scene_path = Path(settings.scene_json_path)
-    if not scene_path.exists():
-        raise HTTPException(status_code=404, detail=f"Scene JSON not found: {scene_path}")
-    return Response(content=scene_path.read_text(encoding="utf-8"), media_type="application/json")
+    scene = scene_bus.latest()
+    if scene is None:
+        raise HTTPException(status_code=404, detail="No in-memory scene available yet")
+    return Response(content=json.dumps(scene), media_type="application/json")
 
 
 @app.get("/viewer", response_class=HTMLResponse)
@@ -437,59 +435,44 @@ async def scene_stream(
     camera_id: str | None = None,
     max_fps: float = 10.0,
 ) -> None:
-    """Development-only stream of the local scene JSON file.
+    """Development-only stream of in-memory perception scene updates.
 
     This keeps the current browser/debug workflow available. It is intentionally
     a thin adapter around perception output, not the long-term orchestration hub
     or ROS2 bridge.
     """
     await websocket.accept()
-    settings = get_settings()
-    scene_path = Path(settings.scene_json_path)
     min_send_interval = 1.0 / max_fps if max_fps > 0 else 0.0
     last_sent_key: tuple[object, object, object] | None = None
     last_send_time = 0.0
 
     try:
         while True:
-            scene = _read_latest_scene(scene_path)
-            if scene is None:
-                await asyncio.sleep(SCENE_STREAM_POLL_SECONDS)
-                if not await _websocket_is_connected(websocket):
-                    return
-                continue
+            scene = await scene_bus.wait_for_next(last_sent_key)
 
             if camera_id is not None and scene.get("camera_id") != camera_id:
-                await asyncio.sleep(SCENE_STREAM_POLL_SECONDS)
                 if not await _websocket_is_connected(websocket):
                     return
                 continue
 
-            scene_key = (
+            now = perf_counter()
+            if now - last_send_time < min_send_interval:
+                await asyncio.sleep(min_send_interval - (now - last_send_time))
+
+            await websocket.send_json(_build_scene_envelope(scene))
+            last_sent_key = (
                 scene.get("frame_id"),
                 scene.get("timestamp"),
                 scene.get("camera_id"),
             )
-            now = perf_counter()
-            if scene_key != last_sent_key and now - last_send_time >= min_send_interval:
-                await websocket.send_json(_build_scene_envelope(scene))
-                last_sent_key = scene_key
-                last_send_time = now
+            last_send_time = perf_counter()
 
-            await asyncio.sleep(SCENE_STREAM_POLL_SECONDS)
             if not await _websocket_is_connected(websocket):
                 return
     except WebSocketDisconnect:
         return
     except asyncio.CancelledError:
         return
-
-
-def _read_latest_scene(scene_path: Path) -> dict[str, object] | None:
-    try:
-        return json.loads(scene_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
 
 
 def _build_scene_envelope(scene: dict[str, object]) -> dict[str, object]:

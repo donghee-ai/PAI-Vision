@@ -8,6 +8,7 @@ import time
 
 import uvicorn
 
+from app.adapters.scene_bus import scene_bus
 from app.config import get_settings
 from app.perception.live_camera import LiveCameraConfig, run_live_camera
 
@@ -51,9 +52,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def _run_api_adapter(host: str, port: int, reload: bool) -> None:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    scene_bus.attach_loop(loop)
+
     config = uvicorn.Config("app.adapters.local_api:app", host=host, port=port, reload=reload, log_level="info")
     adapter = uvicorn.Server(config)
-    asyncio.run(adapter.serve())
+    loop.run_until_complete(adapter.serve())
 
 
 
@@ -94,8 +99,11 @@ def main() -> None:
     if args.adapter_wait_seconds > 0:
         time.sleep(args.adapter_wait_seconds)
 
-    print("Starting live camera loop with shared scene JSON output")
-    run_live_camera(_build_live_camera_config(args))
+    print("Starting live camera loop with direct scene push to local adapter")
+    run_live_camera(
+        _build_live_camera_config(args),
+        on_scene=scene_bus.publish_nowait,
+    )
 
 
 if __name__ == "__main__":

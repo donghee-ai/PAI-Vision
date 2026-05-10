@@ -99,7 +99,11 @@ def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
 
 
 
-def run_live_camera(config: LiveCameraConfig) -> None:
+def run_live_camera(
+    config: LiveCameraConfig,
+    *,
+    on_scene: callable | None = None,
+) -> None:
     target_interval = 1.0 / config.target_fps if config.target_fps > 0 else 0.0
     service = YoloSegmentationService(model_path=config.model, device=config.device)
     tracker = CentroidTracker()
@@ -157,6 +161,8 @@ def run_live_camera(config: LiveCameraConfig) -> None:
                 inference_ms=inference_ms,
                 loop_fps=smoothed_fps,
             )
+            if on_scene is not None:
+                on_scene(scene.model_dump())
             if not config.no_scene_json:
                 scene_write_ok = write_scene_json(scene, config.scene_json)
             if not config.no_session_log:
