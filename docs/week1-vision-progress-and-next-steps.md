@@ -31,7 +31,7 @@ Camera frame
 
 ### 3. 실시간 카메라 루프
 
-- `python -m app.live_camera`로 카메라 실시간 추론을 실행할 수 있다.
+- `python -m app.perception.live_camera`로 카메라 실시간 추론을 실행할 수 있다.
 - 화면에는 segmentation mask, bbox, label, center point, inference time, loop FPS가 표시된다.
 - 목표 FPS는 `.env`의 `CAMERA_TARGET_FPS=10`으로 설정했다.
 
@@ -152,30 +152,31 @@ Language/Action 파트와 안정적으로 연결하려면 프레임 간 tracking
 ### 1. 팀 회의에서 정할 것
 
 - Vision 결과를 Language/Action으로 전달하는 방식
-- WebSocket을 먼저 쓸지, ROS2 bridge를 고려할지
+- 외부 hub/bridge가 scene JSON을 어떤 방식으로 소비할지
 - 실제 카메라와 로봇 구성
 - 초기 데모 객체 클래스
 - MuJoCo 시뮬레이션과 실제 로봇 연결 방식
 
 ### 2. 통신 구조
 
-현재 HTTP API는 테스트와 디버그에는 충분하다.
+현재 HTTP API와 WebSocket stream은 테스트와 디버그에는 충분하다.
+장기적으로는 Vision 레포가 hub를 소유하지 않고, 외부 hub/ROS2 bridge가 `runtime/latest_scene.json` 또는 local adapter endpoint를 소비하는 구조가 맞다.
 
 실시간 VLA 연결을 위해서는 다음 중 하나를 정해야 한다.
 
 | 방식 | 용도 |
 | --- | --- |
-| WebSocket | scene JSON을 실시간 stream으로 전달 |
-| ROS2 topic | 실제 로봇 시스템과 통합 |
+| external hub WebSocket | scene JSON을 실시간 stream으로 전달 |
+| external ROS2 bridge | 실제 로봇 시스템과 통합 |
 | file polling | 가장 단순한 MVP 방식 |
 | queue/pub-sub | 프로세스 간 안정적 전달 |
 
 추천 순서:
 
 ```text
-WebSocket /ws/scenes scene stream
-→ Language planner 연결
-→ 이후 ROS2 bridge 검토
+PAI-Vision compact scene JSON 안정화
+→ local adapter로 개발/디버그
+→ 외부 hub 또는 ROS2 bridge가 scene JSON 소비
 ```
 
 ### 3. 2D Action target 정리
@@ -253,7 +254,7 @@ VLA용 scene JSON 생성
 다음 핵심 단계는 연결 방식 결정과 2D action target 안정화다.
 
 ```text
-단기: WebSocket scene stream 또는 Language planner 연결
+단기: compact scene JSON contract와 local adapter 기반 Language planner 연결
 중기: custom YOLO11-Seg fine-tuning
-장기: 2D track 기반 ROS2/robot integration
+장기: 외부 hub/bridge를 통한 2D track 기반 ROS2/robot integration
 ```

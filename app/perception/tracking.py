@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import hypot
 
-from app.schemas import DetectedObject, PredictionResponse
+from app.perception.schemas import DetectedObject, PredictionResponse
 
 
 @dataclass

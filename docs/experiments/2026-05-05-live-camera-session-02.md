@@ -140,9 +140,9 @@ Object count per frame:
 현재 scene JSON은 다음 목적에 적합하다.
 
 - 최신 장면 상태 polling
-- WebSocket scene stream
+- local adapter 또는 외부 hub의 scene stream
 - Language planner 입력
-- 추후 ROS2 `/vision/scene` topic 변환
+- 추후 별도 ROS2 bridge의 `/vision/scene` topic 변환
 
 아직 필요한 항목:
 
@@ -150,4 +150,4 @@ Object count per frame:
 2. Depth 기반 `camera_xyz` 계산
 3. robot calibration 기반 `robot_xyz` 계산
 4. tabletop 커스텀 클래스 fine-tuning
-5. WebSocket `/scene/stream` 추가
+5. local adapter stream은 개발용으로 유지하고, 장기 stream/bridge는 외부 hub 쪽에서 소유
