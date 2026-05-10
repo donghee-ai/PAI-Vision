@@ -270,7 +270,7 @@ runtime/latest_scene.json
 또한 실행할 때마다 세션 단위 JSONL 로그가 생성됩니다.
 
 ```text
-runtime/logs/live_camera_YYYYMMDD_HHMMSS.jsonl
+runtime/logs/live_camera_front_rgb_YYYYMMDD_HHMMSS.jsonl
 ```
 
 `latest_scene.json`은 최신 상태만 덮어쓰고, JSONL 로그는 프레임별 scene state를 한 줄씩 누적합니다. 실험 문서화와 성능 분석은 JSONL 로그를 기준으로 합니다.
@@ -316,6 +316,21 @@ uvicorn app.adapters.local_api:app --host 0.0.0.0 --port 8000 --reload
 python -m app.adapters.run_all
 ```
 
+기본 실행은 기존처럼 `CAMERA_ID`/`CAMERA_INDEX` 또는 `--camera-id`/`--camera` 한 대를 사용합니다.
+여러 카메라는 설정 목록으로 등록합니다. 각 항목은 `camera_id:index` 형식이며, 같은 `run_live_camera` worker 경로를 카메라별 독립 thread로 실행합니다.
+
+```bash
+python -m app.adapters.run_all --cameras front_rgb:0,side_rgb:1 --no-display
+```
+
+환경 변수로도 지정할 수 있습니다.
+
+```bash
+CAMERAS=front_rgb:0,side_rgb:1 python -m app.adapters.run_all --no-display
+```
+
+멀티 카메라 실행에서는 scene 메시지가 카메라별로 독립 publish됩니다. `camera_id`는 각 scene JSON 안에 포함되며, 최신 scene 파일은 기본 경로가 `runtime/latest_scene.json`이면 `runtime/latest_scene_front_rgb.json`, `runtime/latest_scene_side_rgb.json`처럼 카메라별 파일로 나뉩니다. `--scene-json 'runtime/latest_scene_{camera_id}.json'`처럼 명시적인 템플릿도 사용할 수 있습니다.
+
 처음 실행할 때 Ultralytics가 `yolo11s-seg.pt` pretrained weight를 자동으로 내려받습니다.
 
 ## 8. API 테스트
@@ -348,6 +363,12 @@ curl -X POST "http://localhost:8000/predict/annotated" `
 curl "http://localhost:8000/scene/latest"
 ```
 
+특정 카메라의 최신 scene만 조회:
+
+```bash
+curl "http://localhost:8000/scene/latest?camera_id=front_rgb"
+```
+
 브라우저에서 실시간 scene stream을 확인하는 뷰어:
 
 ```text
@@ -360,8 +381,8 @@ http://localhost:8000/viewer
 ws://localhost:8000/ws/scenes
 ```
 
-현재 adapter는 단일 카메라 개발 흐름을 상정하지만, 메시지 안의 `camera_id`로 카메라를 구분합니다.
-필요하면 클라이언트가 `camera_id`와 `max_fps`를 query parameter로 지정할 수 있습니다.
+`camera_id`를 지정하지 않으면 모든 카메라의 scene update를 독립 메시지로 스트리밍합니다.
+필요하면 클라이언트가 `camera_id`와 `max_fps`를 query parameter로 지정해 특정 카메라만 받을 수 있습니다.
 
 ```text
 ws://localhost:8000/ws/scenes?camera_id=front_rgb&max_fps=10

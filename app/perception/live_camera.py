@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Callable
 
 import cv2
 import numpy as np
@@ -102,14 +103,14 @@ def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
 def run_live_camera(
     config: LiveCameraConfig,
     *,
-    on_scene: callable | None = None,
+    on_scene: Callable[[dict[str, Any]], None] | None = None,
 ) -> None:
     target_interval = 1.0 / config.target_fps if config.target_fps > 0 else 0.0
     service = YoloSegmentationService(model_path=config.model, device=config.device)
     tracker = CentroidTracker()
     capture = open_camera(config.camera, config.width, config.height)
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    scene_log_path = config.scene_log_dir / f"live_camera_{session_id}.jsonl"
+    scene_log_path = config.scene_log_dir / f"live_camera_{config.camera_id}_{session_id}.jsonl"
 
     frame_id = 0
     smoothed_fps = 0.0
@@ -119,7 +120,7 @@ def run_live_camera(
 
     print(
         f"Starting live camera: camera={config.camera}, device={config.device} -> {service.resolved_device}, "
-        f"model={config.model}, target_fps={config.target_fps}"
+        f"camera_id={config.camera_id}, model={config.model}, target_fps={config.target_fps}"
     )
     print(f"Session id: {session_id}")
     if not config.no_session_log:
