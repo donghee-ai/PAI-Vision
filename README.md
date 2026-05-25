@@ -3,12 +3,33 @@
 Physical AI 파이프라인용 **Vision 모듈 실험 레포**입니다.
 
 핵심 역할:
-- 카메라 입력 받기
+- 카메라 입력 받기 (USB 카메라 단일 소유)
 - YOLO 기반 객체 인식 수행
-- 후속 모듈이 읽기 쉬운 **scene JSON** 내보내기
+- 후속 모듈이 읽기 쉬운 **scene JSON** 내보내기 (WebSocket / HTTP)
+- **raw 프레임 ZMQ 송출** — LeRobot 정책이 동일 카메라 스트림을 소비
 
 장기적으로 hub / ROS2 bridge / orchestration 책임은 이 레포 밖에서 담당하고,
-이 레포의 HTTP/WebSocket은 **로컬 개발용 adapter**로 유지합니다.
+이 레포의 HTTP/WebSocket/ZMQ는 **로컬 개발용 adapter**로 유지합니다.
+
+### 스트리밍 아키텍처
+
+```
+USB 카메라
+   │
+   ▼
+Capture Thread (CAMERA_CAPTURE_FPS, 기본 30Hz)
+   │
+   ├──► on_frame ──► ZMQ PUB :5555  ──► LeRobot ZMQCamera (raw 프레임)
+   │
+   └──► FrameBuffer (단일 슬롯, latest wins)
+            │
+            ▼
+       Perception Thread (CAMERA_TARGET_FPS, 기본 10Hz)
+            │
+            └──► YOLO → scene_bus → WebSocket /ws/scenes (PAI-Language용)
+```
+
+YOLO가 느려져도 ZMQ 송출 rate는 영향받지 않습니다. 캡처/지각 스레드가 완전히 분리되어 있고, 프레임 버퍼는 항상 최신 1장만 유지합니다 ("latest wins").
 
 ---
 
@@ -50,11 +71,20 @@ CAMERA_ID=front_rgb
 CAMERA_INDEX=0
 CAMERAS=
 
-CAMERA_TARGET_FPS=10
+# Capture / perception 분리된 FPS 설정
+CAMERA_CAPTURE_FPS=30   # 캡처 + ZMQ 송출 rate (LeRobot 학습 FPS와 일치 권장)
+CAMERA_TARGET_FPS=10    # YOLO 추론 rate cap (느려도 ZMQ에 영향 X)
+
 CAMERA_WIDTH=1280
 CAMERA_HEIGHT=720
 SCENE_JSON_PATH=runtime/latest_scene_{camera_id}.json
 SCENE_LOG_DIR=runtime/logs
+
+# ZMQ raw-frame publisher (LeRobot 연동)
+ZMQ_PUBLISH_ENABLED=false
+ZMQ_PUBLISH_BIND=tcp://*:5555
+ZMQ_PUBLISH_FPS=30
+ZMQ_PUBLISH_JPEG_QUALITY=90
 ```
 
 ### 단일 카메라
@@ -179,6 +209,50 @@ http://localhost:8000/viewer
 즉:
 - **perception = 보기 / 인식하기**
 - **adapter = 개발 중 연결/관찰하기**
+
+---
+
+## LeRobot 연동 (ZMQ raw-frame)
+
+PAI-Vision이 카메라를 단일 소유하면서 raw 프레임을 ZMQ로 송출하면, LeRobot 정책은
+`ZMQCamera` 백엔드로 동일 스트림을 소비할 수 있습니다 (USB 카메라 점유 충돌 없음).
+
+### 1. PAI-Vision에서 ZMQ 활성화
+
+`.env`:
+```env
+ZMQ_PUBLISH_ENABLED=true
+ZMQ_PUBLISH_BIND=tcp://*:5555
+ZMQ_PUBLISH_FPS=30
+CAMERA_CAPTURE_FPS=30
+```
+
+기동:
+```bash
+python -m app.adapters.run_all --camera 0 --camera-id front_rgb
+```
+콘솔에 `ZMQ raw-frame publisher active at tcp://*:5555 ...`가 보이면 OK.
+
+### 2. LeRobot 쪽에서 ZMQCamera로 수신
+
+기록 / 추론 명령 어디서나 (예: `lerobot-record`, `lerobot-rollout`):
+```bash
+--robot.cameras="{front_rgb: {type: zmq, server_address: localhost, port: 5555, camera_name: front_rgb, width: 1280, height: 720, fps: 30}}"
+```
+
+**중요**: LeRobot 쪽 `camera_name`이 PAI-Vision `CAMERA_ID`와 정확히 일치해야 함.
+
+### 3. SUB 한 줄로 sanity check
+
+```python
+import zmq, json
+ctx = zmq.Context(); s = ctx.socket(zmq.SUB)
+s.setsockopt_string(zmq.SUBSCRIBE, ""); s.connect("tcp://localhost:5555")
+msg = json.loads(s.recv_string())
+print("cameras:", list(msg["images"].keys()), "ts:", msg["timestamps"])
+```
+
+학습 데이터 수집과 추론 모두 이 ZMQ 파이프라인으로 통일하면 도메인 일관성이 보장됩니다 (입력 분포가 같음).
 
 ---
 

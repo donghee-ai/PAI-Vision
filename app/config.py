@@ -19,10 +19,15 @@ class Settings(BaseSettings):
     camera_index: int = Field(default=0, alias="CAMERA_INDEX")
     cameras: str | None = Field(default=None, alias="CAMERAS")
     camera_target_fps: float = Field(default=10.0, alias="CAMERA_TARGET_FPS")
+    camera_capture_fps: float = Field(default=30.0, alias="CAMERA_CAPTURE_FPS")
     camera_width: int = Field(default=1280, alias="CAMERA_WIDTH")
     camera_height: int = Field(default=720, alias="CAMERA_HEIGHT")
     scene_json_path: str = Field(default="runtime/latest_scene.json", alias="SCENE_JSON_PATH")
     scene_log_dir: str = Field(default="runtime/logs", alias="SCENE_LOG_DIR")
+    zmq_publish_enabled: bool = Field(default=False, alias="ZMQ_PUBLISH_ENABLED")
+    zmq_publish_bind: str = Field(default="tcp://*:5555", alias="ZMQ_PUBLISH_BIND")
+    zmq_publish_fps: float = Field(default=30.0, alias="ZMQ_PUBLISH_FPS")
+    zmq_publish_jpeg_quality: int = Field(default=90, alias="ZMQ_PUBLISH_JPEG_QUALITY")
 
 
 @lru_cache

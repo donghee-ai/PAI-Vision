@@ -10,6 +10,7 @@ import time
 import uvicorn
 
 from app.adapters.scene_bus import scene_bus
+from app.adapters.zmq_frame_publisher import ZmqFramePublisher
 from app.config import get_settings
 from app.perception.live_camera import LiveCameraConfig, run_live_camera
 
@@ -49,7 +50,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--width", type=int, default=settings.camera_width)
     parser.add_argument("--height", type=int, default=settings.camera_height)
-    parser.add_argument("--target-fps", type=float, default=settings.camera_target_fps)
+    parser.add_argument("--target-fps", type=float, default=settings.camera_target_fps, help="YOLO/perception FPS cap")
+    parser.add_argument("--capture-fps", type=float, default=settings.camera_capture_fps, help="Capture thread FPS (raw + ZMQ)")
     parser.add_argument("--model", default=settings.yolo_model)
     parser.add_argument("--device", default=settings.yolo_device)
     parser.add_argument("--imgsz", type=int, default=settings.yolo_imgsz)
@@ -136,6 +138,7 @@ def _build_live_camera_config(
         width=args.width,
         height=args.height,
         target_fps=args.target_fps,
+        capture_fps=args.capture_fps,
         model=args.model,
         device=args.device,
         imgsz=args.imgsz,
@@ -151,14 +154,23 @@ def _build_live_camera_config(
     )
 
 
-def _run_camera_worker(config: LiveCameraConfig) -> None:
+def _run_camera_worker(
+    config: LiveCameraConfig,
+    frame_publisher: ZmqFramePublisher | None = None,
+) -> None:
     print(f"Starting camera worker {config.camera_id} on OpenCV index {config.camera}")
-    run_live_camera(config, on_scene=scene_bus.publish_nowait)
+    on_frame = frame_publisher.publish if frame_publisher is not None and frame_publisher.enabled else None
+    run_live_camera(
+        config,
+        on_scene=scene_bus.publish_nowait,
+        on_frame=on_frame,
+    )
 
 
 
 def main() -> None:
     args = parse_args()
+    settings = get_settings()
     camera_registrations = _parse_camera_registrations(args)
 
     print(f"Starting local API/WebSocket adapter on http://{args.host}:{args.port}")
@@ -172,6 +184,20 @@ def main() -> None:
     if args.adapter_wait_seconds > 0:
         time.sleep(args.adapter_wait_seconds)
 
+    frame_publisher: ZmqFramePublisher | None = None
+    if settings.zmq_publish_enabled:
+        frame_publisher = ZmqFramePublisher(
+            bind_address=settings.zmq_publish_bind,
+            fps=settings.zmq_publish_fps,
+            jpeg_quality=settings.zmq_publish_jpeg_quality,
+        )
+        frame_publisher.start()
+        if frame_publisher.enabled:
+            print(
+                f"ZMQ raw-frame publisher active at {settings.zmq_publish_bind} "
+                f"(fps={settings.zmq_publish_fps}, jpeg_q={settings.zmq_publish_jpeg_quality})"
+            )
+
     camera_configs = [
         _build_live_camera_config(args, registration, len(camera_registrations))
         for registration in camera_registrations
@@ -180,7 +206,7 @@ def main() -> None:
     camera_threads = [
         threading.Thread(
             target=_run_camera_worker,
-            args=(config,),
+            args=(config, frame_publisher),
             name=f"camera-{config.camera_id}",
             daemon=True,
         )
@@ -195,6 +221,9 @@ def main() -> None:
             camera_thread.join()
     except KeyboardInterrupt:
         print("Stopping after keyboard interrupt; camera workers will exit with the process.")
+    finally:
+        if frame_publisher is not None:
+            frame_publisher.stop()
 
 
 if __name__ == "__main__":
