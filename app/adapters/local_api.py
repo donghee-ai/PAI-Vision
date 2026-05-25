@@ -240,10 +240,14 @@ SCENE_VIEWER_HTML = """
 
     <script>
       const params = new URLSearchParams(window.location.search);
-      const cameraId = params.get("camera_id") || "front_rgb";
+      const cameraId = params.get("camera_id");
       const maxFps = params.get("max_fps") || "10";
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const socketUrl = `${protocol}://${window.location.host}/ws/scenes?camera_id=${encodeURIComponent(cameraId)}&max_fps=${encodeURIComponent(maxFps)}`;
+      const socketParams = new URLSearchParams({ max_fps: maxFps });
+      if (cameraId) {
+        socketParams.set("camera_id", cameraId);
+      }
+      const socketUrl = `${protocol}://${window.location.host}/ws/scenes?${socketParams.toString()}`;
       const status = document.getElementById("status");
       const statusText = document.getElementById("statusText");
 
@@ -417,10 +421,11 @@ async def predict_annotated(
 
 
 @app.get("/scene/latest")
-def latest_scene() -> Response:
-    scene = scene_bus.latest()
+def latest_scene(camera_id: str | None = None) -> Response:
+    scene = scene_bus.latest(camera_id=camera_id)
     if scene is None:
-        raise HTTPException(status_code=404, detail="No in-memory scene available yet")
+        detail = f"No in-memory scene available yet for camera_id={camera_id}" if camera_id else "No in-memory scene available yet"
+        raise HTTPException(status_code=404, detail=detail)
     return Response(content=json.dumps(scene), media_type="application/json")
 
 
@@ -443,17 +448,12 @@ async def scene_stream(
     """
     await websocket.accept()
     min_send_interval = 1.0 / max_fps if max_fps > 0 else 0.0
-    last_sent_key: tuple[object, object, object] | None = None
+    last_sent_key: tuple[object, object, object, object] | None = None
     last_send_time = 0.0
 
     try:
         while True:
-            scene = await scene_bus.wait_for_next(last_sent_key)
-
-            if camera_id is not None and scene.get("camera_id") != camera_id:
-                if not await _websocket_is_connected(websocket):
-                    return
-                continue
+            scene = await scene_bus.wait_for_next(last_sent_key, camera_id=camera_id)
 
             now = perf_counter()
             if now - last_send_time < min_send_interval:
@@ -461,6 +461,7 @@ async def scene_stream(
 
             await websocket.send_json(_build_scene_envelope(scene))
             last_sent_key = (
+                scene.get("_bus_sequence"),
                 scene.get("frame_id"),
                 scene.get("timestamp"),
                 scene.get("camera_id"),
@@ -476,11 +477,13 @@ async def scene_stream(
 
 
 def _build_scene_envelope(scene: dict[str, object]) -> dict[str, object]:
+    public_scene = dict(scene)
+    public_scene.pop("_bus_sequence", None)
     return {
         "type": WS_TOPIC_VISION_UPDATE,
         "timestamp": scene.get("timestamp"),
         "sender": WS_SENDER_VISION,
-        "data": scene,
+        "data": public_scene,
     }
 
 
