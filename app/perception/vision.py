@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont
@@ -7,6 +8,14 @@ from ultralytics import YOLO
 
 from app.perception.device import resolve_yolo_device
 from app.perception.schemas import DetectedObject, PredictionResponse
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_classes(classes: str | None) -> list[str]:
+    if not classes:
+        return []
+    return [name.strip() for name in classes.split(",") if name.strip()]
 
 
 PALETTE: tuple[tuple[int, int, int], ...] = (
@@ -110,10 +119,38 @@ def render_prediction_overlay(
 class YoloSegmentationService:
     model_path: str
     device: str
+    classes: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "_model", YOLO(self.model_path))
+        model = YOLO(self.model_path)
+        object.__setattr__(self, "_model", model)
         object.__setattr__(self, "_resolved_device", resolve_yolo_device(self.device))
+        self._apply_open_vocabulary(model)
+
+    def _apply_open_vocabulary(self, model: YOLO) -> None:
+        """Set open-vocabulary prompts on YOLOE / YOLO-World models.
+
+        YOLOE exposes ``get_text_pe`` and needs the precomputed text embeddings;
+        YOLO-World embeds the names internally via ``set_classes`` alone. Closed-
+        vocabulary models (e.g. yolo11s-seg) have neither and keep their trained
+        labels — a configured class list is then a no-op (with a warning).
+        """
+        names = _parse_classes(self.classes)
+        if not names:
+            return
+
+        if hasattr(model, "get_text_pe"):  # YOLOE
+            model.set_classes(names, model.get_text_pe(names))
+            logger.info("YOLOE open vocabulary set to %d classes: %s", len(names), names)
+        elif hasattr(model, "set_classes"):  # YOLO-World
+            model.set_classes(names)
+            logger.info("YOLO-World open vocabulary set to %d classes: %s", len(names), names)
+        else:
+            logger.warning(
+                "Model %s is closed-vocabulary; ignoring YOLO_CLASSES=%s",
+                self.model_path,
+                self.classes,
+            )
 
     @property
     def resolved_device(self) -> str:

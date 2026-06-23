@@ -9,6 +9,7 @@ import time
 
 import uvicorn
 
+from app.adapters.cutout_stream import CutoutStreamer, cutout_bus
 from app.adapters.scene_bus import scene_bus
 from app.adapters.zmq_frame_publisher import ZmqFramePublisher
 from app.config import get_settings
@@ -54,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--capture-fps", type=float, default=settings.camera_capture_fps, help="Capture thread FPS (raw + ZMQ)")
     parser.add_argument("--model", default=settings.yolo_model)
     parser.add_argument("--device", default=settings.yolo_device)
+    parser.add_argument("--classes", default=settings.yolo_classes, help="Comma-separated open-vocab prompts (YOLOE/YOLO-World)")
     parser.add_argument("--imgsz", type=int, default=settings.yolo_imgsz)
     parser.add_argument("--conf", type=float, default=settings.yolo_conf)
     parser.add_argument("--iou", type=float, default=settings.yolo_iou)
@@ -72,6 +74,7 @@ def _run_api_adapter(host: str, port: int, reload: bool) -> None:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     scene_bus.attach_loop(loop)
+    cutout_bus.attach_loop(loop)
 
     config = uvicorn.Config("app.adapters.local_api:app", host=host, port=port, reload=reload, log_level="info")
     adapter = uvicorn.Server(config)
@@ -141,6 +144,7 @@ def _build_live_camera_config(
         capture_fps=args.capture_fps,
         model=args.model,
         device=args.device,
+        classes=args.classes,
         imgsz=args.imgsz,
         conf=args.conf,
         iou=args.iou,
@@ -157,13 +161,16 @@ def _build_live_camera_config(
 def _run_camera_worker(
     config: LiveCameraConfig,
     frame_publisher: ZmqFramePublisher | None = None,
+    cutout_streamer: CutoutStreamer | None = None,
 ) -> None:
     print(f"Starting camera worker {config.camera_id} on OpenCV index {config.camera}")
     on_frame = frame_publisher.publish if frame_publisher is not None and frame_publisher.enabled else None
+    on_cutout = cutout_streamer.publish if cutout_streamer is not None and cutout_streamer.enabled else None
     run_live_camera(
         config,
         on_scene=scene_bus.publish_nowait,
         on_frame=on_frame,
+        on_cutout=on_cutout,
     )
 
 
@@ -198,6 +205,23 @@ def main() -> None:
                 f"(fps={settings.zmq_publish_fps}, jpeg_q={settings.zmq_publish_jpeg_quality})"
             )
 
+    cutout_streamer: CutoutStreamer | None = None
+    if settings.cutout_enabled:
+        cutout_streamer = CutoutStreamer(
+            fps=settings.cutout_fps,
+            image_format=settings.cutout_format,
+            quality=settings.cutout_quality,
+            zmq_enabled=settings.cutout_zmq_enabled,
+            zmq_bind=settings.cutout_zmq_bind,
+        )
+        cutout_streamer.start()
+        if cutout_streamer.enabled:
+            zmq_note = f", ZMQ {settings.cutout_zmq_bind}" if settings.cutout_zmq_enabled else ""
+            print(
+                f"Cutout streamer active -> WebSocket /ws/cutouts "
+                f"(fps={settings.cutout_fps}, format={settings.cutout_format}{zmq_note})"
+            )
+
     camera_configs = [
         _build_live_camera_config(args, registration, len(camera_registrations))
         for registration in camera_registrations
@@ -206,7 +230,7 @@ def main() -> None:
     camera_threads = [
         threading.Thread(
             target=_run_camera_worker,
-            args=(config, frame_publisher),
+            args=(config, frame_publisher, cutout_streamer),
             name=f"camera-{config.camera_id}",
             daemon=True,
         )
@@ -224,6 +248,8 @@ def main() -> None:
     finally:
         if frame_publisher is not None:
             frame_publisher.stop()
+        if cutout_streamer is not None:
+            cutout_streamer.stop()
 
 
 if __name__ == "__main__":

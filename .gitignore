@@ -34,6 +34,8 @@ bin/
 *.pt
 *.onnx
 *.engine
+# YOLOE text-encoder weights, auto-downloaded at runtime
+mobileclip_*.ts
 runs/
 runtime/
 

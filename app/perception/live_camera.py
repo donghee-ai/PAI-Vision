@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image
 
 from app.config import get_settings
+from app.perception.cutout import build_foreground_cutout_rgba
 from app.perception.frame_buffer import FrameBuffer
 from app.perception.scene import append_scene_jsonl, build_scene_response, write_scene_json
 from app.perception.tracking import CentroidTracker
@@ -29,6 +30,7 @@ class LiveCameraConfig:
     capture_fps: float
     model: str
     device: str
+    classes: str | None
     imgsz: int
     conf: float
     iou: float
@@ -53,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--capture-fps", type=float, default=settings.camera_capture_fps, help="Capture thread FPS (raw frames + ZMQ)")
     parser.add_argument("--model", default=settings.yolo_model, help="Model path or Ultralytics model name")
     parser.add_argument("--device", default=settings.yolo_device, help="Device, e.g. auto, cpu, mps, cuda:0")
+    parser.add_argument("--classes", default=settings.yolo_classes, help="Comma-separated open-vocab prompts (YOLOE/YOLO-World)")
     parser.add_argument("--imgsz", type=int, default=settings.yolo_imgsz, help="Inference image size")
     parser.add_argument("--conf", type=float, default=settings.yolo_conf, help="Confidence threshold")
     parser.add_argument("--iou", type=float, default=settings.yolo_iou, help="IoU threshold")
@@ -77,6 +80,7 @@ def config_from_args(args: argparse.Namespace) -> LiveCameraConfig:
         capture_fps=args.capture_fps,
         model=args.model,
         device=args.device,
+        classes=args.classes,
         imgsz=args.imgsz,
         conf=args.conf,
         iou=args.iou,
@@ -110,6 +114,7 @@ def run_live_camera(
     *,
     on_scene: Callable[[dict[str, Any]], None] | None = None,
     on_frame: Callable[[str, np.ndarray], None] | None = None,
+    on_cutout: Callable[[str, np.ndarray, dict[str, Any]], None] | None = None,
 ) -> None:
     """Run live camera with capture and perception on independent threads.
 
@@ -119,7 +124,9 @@ def run_live_camera(
     capped at config.target_fps) consumes from the buffer at its own pace —
     YOLO slowdowns therefore never throttle raw-frame streaming.
     """
-    service = YoloSegmentationService(model_path=config.model, device=config.device)
+    service = YoloSegmentationService(
+        model_path=config.model, device=config.device, classes=config.classes
+    )
     tracker = CentroidTracker()
     capture = open_camera(config.camera, config.width, config.height)
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -155,6 +162,7 @@ def run_live_camera(
             stop_event=stop_event,
             scene_log_path=scene_log_path,
             on_scene=on_scene,
+            on_cutout=on_cutout,
         )
     finally:
         stop_event.set()
@@ -205,6 +213,7 @@ def _perception_loop(
     stop_event: threading.Event,
     scene_log_path: Path,
     on_scene: Callable[[dict[str, Any]], None] | None,
+    on_cutout: Callable[[str, np.ndarray, dict[str, Any]], None] | None = None,
 ) -> None:
     """Consume latest frame, run YOLO, publish scene, render display."""
     target_interval = 1.0 / config.target_fps if config.target_fps > 0 else 0.0
@@ -248,6 +257,18 @@ def _perception_loop(
         )
         if on_scene is not None:
             on_scene(scene.model_dump())
+        if on_cutout is not None:
+            cutout_rgba = build_foreground_cutout_rgba(frame_rgb, prediction)
+            on_cutout(
+                config.camera_id,
+                cutout_rgba,
+                {
+                    "frame_id": frame_id,
+                    "timestamp": scene.timestamp,
+                    "image_size": [image.width, image.height],
+                    "object_count": len(scene.objects),
+                },
+            )
         if not config.no_scene_json:
             scene_write_ok = write_scene_json(scene, config.scene_json)
         if not config.no_session_log:

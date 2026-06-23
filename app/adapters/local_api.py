@@ -7,6 +7,7 @@ repository.
 """
 
 import asyncio
+import base64
 import json
 from functools import lru_cache
 from io import BytesIO
@@ -16,8 +17,10 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, 
 from fastapi.responses import HTMLResponse, Response
 from PIL import Image, UnidentifiedImageError
 
+from app.adapters.cutout_stream import WS_TOPIC_CUTOUT_UPDATE, cutout_bus
 from app.adapters.scene_bus import scene_bus
 from app.config import get_settings
+from app.perception.cutout import build_foreground_cutout
 from app.perception.device import resolve_yolo_device
 from app.perception.scene import build_scene_response
 from app.perception.schemas import PredictionResponse, SceneResponse
@@ -319,12 +322,87 @@ SCENE_VIEWER_HTML = """
 """
 
 
+CUTOUT_VIEWER_HTML = """
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PAI Vision Cutout Viewer</title>
+    <style>
+      :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      body { margin: 0; min-height: 100vh; background: #11131a; color: #e7ebf3; }
+      main { width: min(960px, calc(100vw - 24px)); margin: 0 auto; padding: 20px 0; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+      h1 { margin: 0; font-size: 20px; }
+      .status { font-size: 13px; padding: 4px 10px; border-radius: 6px; background: #222634; }
+      .status.connected { background: #11432a; }
+      .status.error, .status.closed { background: #4a1d1d; }
+      .stage {
+        display: grid; place-items: center; min-height: 360px; border-radius: 10px;
+        /* checkerboard so transparency is visible */
+        background-image:
+          linear-gradient(45deg, #2a2f3d 25%, transparent 25%),
+          linear-gradient(-45deg, #2a2f3d 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #2a2f3d 75%),
+          linear-gradient(-45deg, transparent 75%, #2a2f3d 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+      }
+      img { max-width: 100%; max-height: 78vh; image-rendering: auto; }
+      .meta { margin-top: 10px; font-size: 13px; color: #aeb6c6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>PAI Vision Cutout Viewer</h1>
+        <div id="status" class="status">connecting</div>
+      </header>
+      <div class="stage"><img id="frame" alt="cutout stream"></div>
+      <div class="meta" id="meta">Waiting for cutout data</div>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const cameraId = params.get("camera_id");
+      const maxFps = params.get("max_fps") || "15";
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const socketParams = new URLSearchParams({ max_fps: maxFps });
+      if (cameraId) socketParams.set("camera_id", cameraId);
+      const socketUrl = `${protocol}://${window.location.host}/ws/cutouts?${socketParams.toString()}`;
+      const statusEl = document.getElementById("status");
+      const frameEl = document.getElementById("frame");
+      const metaEl = document.getElementById("meta");
+
+      function setStatus(value) { statusEl.className = `status ${value}`; statusEl.textContent = value; }
+
+      setStatus("connecting");
+      const ws = new WebSocket(socketUrl);
+      ws.onopen = () => setStatus("connected");
+      ws.onerror = () => setStatus("error");
+      ws.onclose = () => setStatus("closed");
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        const data = message && message.data ? message.data : message;
+        if (!data || !data.image) return;
+        const fmt = data.image_format || "webp";
+        frameEl.src = `data:image/${fmt};base64,${data.image}`;
+        const size = Array.isArray(data.image_size) ? data.image_size.join("x") : "-";
+        metaEl.textContent = `camera ${data.camera_id ?? "-"} | frame ${data.frame_id ?? "-"} | objects ${data.object_count ?? "-"} | ${size} | ${fmt}`;
+      };
+    </script>
+  </body>
+</html>
+"""
+
+
 @lru_cache
 def get_service() -> YoloSegmentationService:
     settings = get_settings()
     return YoloSegmentationService(
         model_path=settings.yolo_model,
         device=settings.yolo_device,
+        classes=settings.yolo_classes,
     )
 
 
@@ -420,6 +498,33 @@ async def predict_annotated(
     return Response(content=output.getvalue(), media_type="image/png")
 
 
+@app.post("/predict/cutout")
+async def predict_cutout(
+    file: UploadFile = File(...),
+    conf: float | None = Query(default=None, ge=0.0, le=1.0),
+    iou: float | None = Query(default=None, ge=0.0, le=1.0),
+    imgsz: int | None = Query(default=None, ge=32, le=2048),
+) -> Response:
+    """Foreground cutout (background removed, transparent PNG) for one image."""
+    settings = get_settings()
+    content = await file.read()
+    try:
+        image = Image.open(BytesIO(content)).convert("RGB")
+    except UnidentifiedImageError as exc:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid image") from exc
+
+    prediction = get_service().predict(
+        image,
+        conf=settings.yolo_conf if conf is None else conf,
+        iou=settings.yolo_iou if iou is None else iou,
+        imgsz=settings.yolo_imgsz if imgsz is None else imgsz,
+    )
+    cutout = build_foreground_cutout(image, prediction)
+    output = BytesIO()
+    cutout.save(output, format="PNG")
+    return Response(content=output.getvalue(), media_type="image/png")
+
+
 @app.get("/scene/latest")
 def latest_scene(camera_id: str | None = None) -> Response:
     scene = scene_bus.latest(camera_id=camera_id)
@@ -429,9 +534,26 @@ def latest_scene(camera_id: str | None = None) -> Response:
     return Response(content=json.dumps(scene), media_type="application/json")
 
 
+@app.get("/cutout/latest")
+def latest_cutout(camera_id: str | None = None) -> Response:
+    """Latest foreground cutout as a decoded image (transparent background)."""
+    payload = cutout_bus.latest(camera_id=camera_id)
+    if payload is None or not payload.get("image"):
+        detail = f"No cutout available yet for camera_id={camera_id}" if camera_id else "No cutout available yet"
+        raise HTTPException(status_code=404, detail=detail)
+    image_bytes = base64.b64decode(payload["image"])
+    image_format = payload.get("image_format", "webp")
+    return Response(content=image_bytes, media_type=f"image/{image_format}")
+
+
 @app.get("/viewer", response_class=HTMLResponse)
 def scene_viewer() -> HTMLResponse:
     return HTMLResponse(SCENE_VIEWER_HTML)
+
+
+@app.get("/cutout/viewer", response_class=HTMLResponse)
+def cutout_viewer() -> HTMLResponse:
+    return HTMLResponse(CUTOUT_VIEWER_HTML)
 
 
 @app.websocket("/ws/scenes")
@@ -484,6 +606,59 @@ def _build_scene_envelope(scene: dict[str, object]) -> dict[str, object]:
         "timestamp": scene.get("timestamp"),
         "sender": WS_SENDER_VISION,
         "data": public_scene,
+    }
+
+
+@app.websocket("/ws/cutouts")
+async def cutout_stream(
+    websocket: WebSocket,
+    camera_id: str | None = None,
+    max_fps: float = 15.0,
+) -> None:
+    """Development-only stream of foreground cutouts (background removed).
+
+    Each message carries one camera's latest cutout as a base64 image plus light
+    metadata. Decode ``data.image`` (``data.image_format``) to get an RGBA frame
+    with the background transparent.
+    """
+    await websocket.accept()
+    min_send_interval = 1.0 / max_fps if max_fps > 0 else 0.0
+    last_sent_key: tuple[object, object, object, object] | None = None
+    last_send_time = 0.0
+
+    try:
+        while True:
+            payload = await cutout_bus.wait_for_next(last_sent_key, camera_id=camera_id)
+
+            now = perf_counter()
+            if now - last_send_time < min_send_interval:
+                await asyncio.sleep(min_send_interval - (now - last_send_time))
+
+            await websocket.send_json(_build_cutout_envelope(payload))
+            last_sent_key = (
+                payload.get("_bus_sequence"),
+                payload.get("frame_id"),
+                payload.get("timestamp"),
+                payload.get("camera_id"),
+            )
+            last_send_time = perf_counter()
+
+            if not await _websocket_is_connected(websocket):
+                return
+    except WebSocketDisconnect:
+        return
+    except asyncio.CancelledError:
+        return
+
+
+def _build_cutout_envelope(payload: dict[str, object]) -> dict[str, object]:
+    public_payload = dict(payload)
+    public_payload.pop("_bus_sequence", None)
+    return {
+        "type": WS_TOPIC_CUTOUT_UPDATE,
+        "timestamp": payload.get("timestamp"),
+        "sender": WS_SENDER_VISION,
+        "data": public_payload,
     }
 
 
