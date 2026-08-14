@@ -131,7 +131,10 @@ def _build_live_camera_config(
     args: argparse.Namespace,
     registration: CameraRegistration,
     camera_count: int,
+    show_window: bool = True,
 ) -> LiveCameraConfig:
+    # show_window=False 인 카메라는 미리보기 창을 띄우지 않는다(캡처/YOLO/ZMQ 송출은 그대로).
+    # 다중 카메라에서 "위(첫) 카메라만 창으로 보고, 나머지는 창 없이 로봇으로 스트림"하는 용도.
     return LiveCameraConfig(
         camera=registration.camera_index,
         camera_id=registration.camera_id,
@@ -148,7 +151,7 @@ def _build_live_camera_config(
         no_scene_json=args.no_scene_json,
         scene_log_dir=Path(args.scene_log_dir),
         no_session_log=args.no_session_log,
-        no_display=args.no_display,
+        no_display=args.no_display or not show_window,
         max_frames=args.max_frames,
         window_name=args.window_name if camera_count == 1 else f"{args.window_name} [{registration.camera_id}]",
     )
@@ -198,9 +201,12 @@ def main() -> None:
                 f"(fps={settings.zmq_publish_fps}, jpeg_q={settings.zmq_publish_jpeg_quality})"
             )
 
+    # 첫(위) 카메라만 미리보기 창을 띄우고, 나머지는 창 없이 스트림/추론만 한다.
     camera_configs = [
-        _build_live_camera_config(args, registration, len(camera_registrations))
-        for registration in camera_registrations
+        _build_live_camera_config(
+            args, registration, len(camera_registrations), show_window=(idx == 0)
+        )
+        for idx, registration in enumerate(camera_registrations)
     ]
     print(f"Starting {len(camera_configs)} live camera worker(s) with direct scene push to local adapter")
     camera_threads = [
